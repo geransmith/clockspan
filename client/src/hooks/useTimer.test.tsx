@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_KICKER, TIMER_PAUSED_OUT } from '../lib/copy';
-import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import {
   answered,
@@ -41,7 +40,6 @@ describe('sync with the server', () => {
     expect(result.current.timer.progress).toBeCloseTo(0.2);
     await settle(1000);
     expect(result.current.timer.countdownSeconds).toBe(1199);
-    expect(document.title).toBe('19:59 · Write the report — Clockspan');
   });
 
   it('refreshes the held day of a session another device started or ended', async () => {
@@ -109,28 +107,6 @@ describe('sync with the server', () => {
     await settle();
     expect(result.current.timer.running).toBeNull();
   });
-
-  it('puts the plain title back on unmount (the error card)', async () => {
-    const { unmount } = await renderRunning(startedAgo(5));
-    expect(document.title).toBe('20:00 · Write the report — Clockspan');
-    unmount();
-    expect(document.title).toBe('Clockspan');
-  });
-
-  it('writes each count to the tab once, with no plain title between two ticks, before the end and past it', async () => {
-    // Two seconds left on the 25 min plan, so the ticks run on into the overrun.
-    const { result, unmount } = await renderRunning(makeSession({ startedAt: T0 - 25 * MINUTE_MS + 2000 }));
-    const titleAt = (seconds: number) => `${formatCountdown(seconds)} · Write the report — Clockspan`;
-    expect(document.title).toBe(titleAt(2));
-    // No plain title between two counts: a host that paints every title change (the desktop
-    // app's browser pane) would flash "Clockspan" once a second.
-    const writes = vi.spyOn(document, 'title', 'set');
-    // One settle per tick: ticks inside one act render once.
-    for (let tick = 0; tick < 4; tick++) await settle(1000);
-    expect(result.current.timer).toMatchObject({ due: true, countdownSeconds: -2 });
-    unmount();
-    expect(writes.mock.calls.flat()).toEqual([...[1, 0, -1, -2].map(titleAt), 'Clockspan']);
-  });
 });
 
 describe("the running session's name", () => {
@@ -144,16 +120,14 @@ describe("the running session's name", () => {
     return renderRunning(session);
   }
 
-  it("is its row's current text while its day's list holds its task, in the tab title too, else the name the server gave", async () => {
+  it("is its row's current text while its day's list holds its task, else the name the server gave", async () => {
     const { result } = await renderOnRow(startedAgo(5, { priorityUid: 'u1', title: 'Ship the fix' }));
     expect(result.current.timer.name).toBe('Ship the fix');
     expect(result.current.timer.linked).toBe(true);
-    expect(document.title).toBe('20:00 · Ship the fix — Clockspan');
 
     // Renamed on the sheet: shown at once, before the save answers.
     act(() => void result.current.store.setPriorities(TODAY, [renamed], [row]));
     expect(result.current.timer.name).toBe('Ship the hotfix');
-    expect(document.title).toBe('20:00 · Ship the hotfix — Clockspan');
     await settle();
 
     // Taken off the day's list, the task still names it, and it has no name of its own to edit.
@@ -565,7 +539,6 @@ describe('pause and resume', () => {
     vi.mocked(api.getRunning).mockResolvedValue(answered({ session: startedAgo(5, { pausedAt: T0 }) }));
     await settle(10 * MINUTE_MS);
     expect(result.current.timer.countdownSeconds).toBe(1200);
-    expect(document.title).toBe('Paused 20:00 · Write the report — Clockspan');
     // A second pause is a no-op.
     await act(() => result.current.timer.pause());
     expect(api.pauseSession).toHaveBeenCalledTimes(1);

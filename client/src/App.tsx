@@ -14,6 +14,7 @@ import { useClock } from './hooks/useClock';
 import { useLiveChanges } from './hooks/useLiveChanges';
 import { useRoute } from './hooks/useRoute';
 import { useSettings } from './hooks/useSettings';
+import { useTabTitle } from './hooks/useTabTitle';
 import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
@@ -78,6 +79,7 @@ function Shell() {
     startBreak,
     timerStarting: starting,
   });
+  useTabTitle(today, now);
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {

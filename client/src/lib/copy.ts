@@ -240,6 +240,21 @@ export const BREAK = {
 } as const;
 
 /**
+ * The tab's title (`lib/title.ts`): the running session, a running break or today's next deadline,
+ * with the app's name after it. These are the owner's approved strings (Option A, clock time), kept
+ * exactly as written whatever the Case convention says, so a case pass leaves them alone.
+ */
+export const TAB_TITLE = {
+  app: 'Clockspan',
+  of: (line: string) => `${line} — Clockspan`,
+  session: (countdown: string, name: string, paused: boolean) => `${paused ? 'Paused ' : ''}${countdown}${name ? ` · ${name}` : ''}`,
+  break: (countdown: string) => `Break ${countdown}`,
+  lunch: (at: string) => `${at} Lunch`,
+  lunchOverdue: (by: string) => `Lunch overdue ${by}`,
+  out: (at: string) => `${at} Out`,
+} as const;
+
+/**
  * With Suggest breaks on, the banner after a session is finished by hand: the break it earned
  * (`lib/breaks.ts`) and a button that starts it. `of` is the number of sessions in a set; the
  * kicker counts down to the set's last, which earns the long break.

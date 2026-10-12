@@ -497,11 +497,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   lifts the break alarm's hold, since that alarm reads `clockOut`'s armed flag (`alarmTargets`).
   The setting `overtimeApproval` shows/hides the switch and banner button (a warning for a Clock out
   typed ahead has none, since that day ends at the typed time: `useAlarms`), and with it off the
-  Clock Out At tile (and the board's clock bar, which takes its words) reads time past the day as
-  "past your day" rather than a red "Over by" (the sheet's tile leaves its line to the card's pill
-  once the day is done or a past day was never clocked out; the bar keeps "Day complete"); a flagged
-  day counts only while the setting is on: `overtimeOn` (`lib/timeclock.ts`) decides, which
-  `Timeclock` (the tiles get the flag from it), `ClockBar` and `useTodayAlarms` call.
+  Clock Out At tile (and the board's clock bar and the tab title, which take its words) reads time
+  past the day as "past your day" rather than a red "Over by" (the sheet's tile leaves its line to
+  the card's pill once the day is done or a past day was never clocked out; the bar keeps
+  "Day complete"); a flagged day counts only while the setting is on: `overtimeOn`
+  (`lib/timeclock.ts`) decides, which `Timeclock` (the tiles get the flag from it), `ClockBar`,
+  `useTodayAlarms` and `useTabTitle` call.
 - **`mealRules: false` turns the meal periods off in the math, not in the components.**
   `computeTimeclock` then never needs a lunch (`not-needed`, so no lunch alarm and no lunch added to
   the clock-out time) and `secondMealApplies` is false; a lunch that was punched still counts. The

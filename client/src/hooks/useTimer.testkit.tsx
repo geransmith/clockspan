@@ -1,5 +1,5 @@
-import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, vi } from 'vitest';
 import * as api from '../api';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { answered, AppProviders, makeDay, makeSession, settle, T0, TODAY } from '../test/hooks';
@@ -7,9 +7,9 @@ import type { RunningSession, Session } from '../types';
 import { useDays, useDayStore } from './useDay';
 import { useTimer } from './useTimer';
 
-// What the useTimer.*.test.tsx files share, the clock, today's day and the page's state before and
-// after each test included. Each one mocks '../api' and '../lib/alerts' itself, since `vi.mock`
-// applies only in the file that calls it.
+// What the useTimer.*.test.tsx files share, the clock, today's day and the page's state before
+// each test included. Each one mocks '../api' and '../lib/alerts' itself, since `vi.mock` applies
+// only in the file that calls it.
 
 export function renderTimer() {
   return renderHook(() => ({ timer: useTimer(), store: { ...useDayStore(), ...useDays() } }), { wrapper: AppProviders });
@@ -32,8 +32,4 @@ beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
   vi.mocked(api.getDay).mockResolvedValue(answered(makeDay()));
   localStorage.clear();
-});
-afterEach(() => {
-  cleanup();
-  document.title = '';
 });
