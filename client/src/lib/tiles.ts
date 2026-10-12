@@ -65,8 +65,9 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
 
   const clockOut: TileView = { value: '—', sub: 'Clock in to see your end time', tone: '' };
   if (tc.clockOutAt != null) {
-    const secs = (tc.clockOutAt - o.now) / 1000;
-    clockOut.value = o.formatTime(tc.clockOutAt);
+    const end = tc.typedClockOut ?? tc.clockOutAt;
+    const secs = (end - o.now) / 1000;
+    clockOut.value = o.formatTime(end);
     if (tc.clockOutStatus === 'done') {
       clockOut.tone = 'tile--accent';
       // The board's clock bar's line; the sheet's card leaves it to its pill (Timeclock).
@@ -86,7 +87,7 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
         : `${formatDuration(tc.overSeconds)} past your day`;
     } else {
       clockOut.tone = !o.overtimeApproved && secs <= warnFromSeconds(o.alarms.clockOut) ? 'tile--warn' : '';
-      // At lunch the end time already holds the rest of the planned lunch.
+      // At lunch the planned end already holds the rest of the planned lunch.
       clockOut.sub = tc.state === 'working' ? `In ${formatDurationCeil(secs)}` : tc.state === 'at-lunch' ? 'After lunch' : 'If you return now';
     }
   }

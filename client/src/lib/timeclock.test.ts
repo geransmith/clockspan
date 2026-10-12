@@ -255,9 +255,19 @@ describe('times typed ahead of now', () => {
     expect(early.state).toBe('working');
     expect(early.clockOutStatus).toBe('upcoming');
     expect(early.secondMealBy).not.toBeNull();
+    expect(early.typedClockOut).toBe(T0 + 9 * HOUR_MS);
     const reached = computeTimeclock(p, settings, T0 + 9 * HOUR_MS);
     expect(reached.state).toBe('done');
     expect(reached.clockOutAt).toBe(T0 + 9 * HOUR_MS);
+    expect(reached.typedClockOut).toBeNull();
+  });
+
+  it('has no typed Clock out with the punches out of order, on a past day, or with none typed', () => {
+    // Lunch in typed before Lunch out, with the Clock out still ahead.
+    expect(computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, T0 + 3 * HOUR_MS, T0 + 9 * HOUR_MS]), settings, T0 + HOUR_MS).typedClockOut).toBeNull();
+    const day = { date: '2026-09-16', punches: punches([T0, null, null, T0 + 9 * HOUR_MS]), workMinutes: null };
+    expect(dayTimeclock(day, settings, '2026-09-17', T0 + 25 * HOUR_MS).typedClockOut).toBeNull();
+    expect(computeTimeclock(punches([T0, null, null, null]), settings, T0 + HOUR_MS).typedClockOut).toBeNull();
   });
 
   it('is at lunch with the Clock out typed ahead and Lunch in empty, until the clock reaches that Clock out', () => {

@@ -99,11 +99,12 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
     // still be there — saying which alarm and why — when the user looks up. The next
     // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
-    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now };
+    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
     for (const e of fire) {
       const { kicker, title, body, tone } = describeEvent(e, ctx);
+      // A warning for a typed Clock out has no overtime to approve: the day ends at that time.
       const action =
-        e.id === 'clockOut' && approveOvertime
+        e.id === 'clockOut' && approveOvertime && e.target !== tc.typedClockOut
           ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
           : e.id === 'retro'
             ? { label: ALARM_ACTIONS.openRetro, run: openRetro }

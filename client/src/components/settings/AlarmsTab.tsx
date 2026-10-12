@@ -19,7 +19,7 @@ export function AlarmsTab({ settings, set }: TabProps) {
         hint={
           settings.mealRules
             ? 'Alerts as lunch, clock-out and the second meal period approach, and a nudge to look back before the day ends.'
-            : 'Alerts as clock-out approaches, and a nudge to look back before the day ends. Both count from your clock-in.'
+            : 'Alerts as clock-out approaches, and a nudge to look back before the day ends.'
         }
       >
         {settings.mealRules && <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />}

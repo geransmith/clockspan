@@ -27,7 +27,8 @@ export interface TimeclockResult {
    * deadline stops being planned then; while at lunch/on a break it moves later as the break
    * runs long. Null before clock-in. Past the target it is the instant
    * the target was reached plus any time off the clock since, and holds still while working
-   * and on a break, so alarms have a fixed anchor. Once done, the last clock-out.
+   * and on a break, so alarms have a fixed anchor. Once done, the last clock-out. It stays the
+   * planned end while a Clock out is typed ahead (`typedClockOut`).
    */
   clockOutAt: number | null;
   clockOutStatus: ClockOutStatus;
@@ -46,6 +47,8 @@ export interface TimeclockResult {
    * Null while they are in order.
    */
   outOfOrder: { position: number; after: number } | null;
+  /** Today's Clock out typed ahead of now, with the punches in order; null otherwise. */
+  typedClockOut: number | null;
   /**
    * A past day still clocked in at its end, with its punches in order: nothing says when the work
    * stopped, so `workedSeconds` runs to the end of the day and no hours total counts it.
@@ -89,7 +92,8 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const lunchOut = reached(byPos.get(LUNCH_OUT_POSITION));
   const lunchIn = reached(byPos.get(LUNCH_IN_POSITION));
   const finalPos = clockOutPosition(punches);
-  const finalOut = finalPos == null ? null : reached(byPos.get(finalPos));
+  const finalAt = finalPos == null ? null : (byPos.get(finalPos) ?? null);
+  const finalOut = reached(finalAt);
   const workTarget = settings.workMinutes * 60;
   const lunchSeconds = settings.lunchMinutes * 60;
   const secondMealTarget = settings.secondMealAfterMinutes * 60;
@@ -108,6 +112,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy: null,
     secondMealStatus: 'none',
     outOfOrder: null,
+    typedClockOut: null,
     unclosed: false,
   };
   if (clockIn == null) return empty;
@@ -218,6 +223,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy,
     secondMealStatus,
     outOfOrder,
+    typedClockOut: finalOut == null && !outOfOrder ? finalAt : null,
     unclosed: opts.frozen === true && clockedIn && !outOfOrder,
   };
 }
