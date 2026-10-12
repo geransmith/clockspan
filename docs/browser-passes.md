@@ -29,7 +29,9 @@ what `npm run seed` writes.
   The bar sits under the header on the sheet, the board and History, and scrolled it stays at the
   top of the window, cards passing under it; the "Time's Up" banner hangs under it, at rest and
   scrolled, never over its buttons.
-- **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. Set Lunch must start
+- **Alarms**: after `npm run seed`, clear Clock in (×) on today's sheet. That also raises "Not
+  Clocked In" (the seed logs sessions), and `localStorage.removeItem('focus:alarms')` in the page
+  and a reload show it again. Set Lunch must start
   within 3 min, Lunch length 0, Work day 10 min and Second meal due after 6 min, in Settings →
   Timeclock or with
   `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchDeadlineMinutes":3,"lunchMinutes":0,"workMinutes":10,"secondMealAfterMinutes":6}'`

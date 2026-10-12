@@ -4,16 +4,25 @@ import type { Settings } from '../types';
 import type { TimeclockResult } from '../lib/timeclock';
 import { ALARM_TAG, alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/alarms';
 import { alert, dismissByTag } from '../lib/alerts';
-import { ALARM_ACTIONS } from '../lib/copy';
-import { resolveHour12 } from '../lib/format';
+import { ALARM_ACTIONS, MISSED_CLOCK_IN } from '../lib/copy';
+import { formatTime, resolveHour12 } from '../lib/format';
 import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
 
-/** The day's switches (which targets are armed is `alarmTargets`) and the banner buttons. */
+/** The day's switches (which targets are armed is `alarmTargets`), the minute the "Not Clocked In" banner offers, and the banner buttons. */
 export interface AlarmDayState extends TargetDay {
   /** Left out while the Overtime approval setting is off. */
   approveOvertime?: () => void;
   openRetro: () => void;
+  /** The minute the "Not Clocked In" banner offers (`missedClockIn`), or null for no banner. */
+  missedClockIn: number | null;
+  /** The "Not Clocked In" banner's Clock In. */
+  clockInAt: (at: number) => void;
 }
+
+// Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps only the targets.
+const CLOCK_IN_TAG = 'clock-in';
+// Its key in today's fired set has no minute: it shows once a day on this device, whatever the first start.
+const CLOCK_IN_KEY = 'clockIn:missing';
 
 /**
  * App-level alarm engine for today's timeclock. Runs every tick: `alarmTargets` says which
@@ -21,7 +30,7 @@ export interface AlarmDayState extends TargetDay {
  * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
-  const { overtimeApproved, retroDone, approveOvertime, openRetro } = day;
+  const { overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt } = day;
   const fired = useRef<{ date: string; set: Set<string> } | null>(null);
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
 
@@ -35,17 +44,38 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     };
     if (fired.current?.date !== dateKey) {
       clearBanners();
+      dismissByTag(CLOCK_IN_TAG);
       fired.current = { date: dateKey, set: new Set() };
     }
     // Not judged yet (settings or punches still settling): leave the rest as it is.
     if (!tc) return;
-    if (tc.clockIn == null) {
-      clearBanners();
-      return;
-    }
     // Read every time, not once: a second tab on this device writes what it fired, and
     // without its keys both tabs would ring every alarm.
     for (const k of readDaySet(USER_KEYS.alarms, dateKey)) fired.current.set.add(k);
+    if (tc.clockIn == null) {
+      clearBanners();
+      // Up once a day, and down with nothing left to offer, a Clock in (below) or a new day. A later
+      // change to the first start neither raises it again nor moves the minute its button writes.
+      if (missedClockIn == null) dismissByTag(CLOCK_IN_TAG);
+      else if (!fired.current.set.has(CLOCK_IN_KEY)) {
+        fired.current.set.add(CLOCK_IN_KEY);
+        addToDaySet(USER_KEYS.alarms, dateKey, fired.current.set);
+        const time = formatTime(missedClockIn, resolveHour12(settings.timeFormat));
+        alert({
+          kicker: MISSED_CLOCK_IN.kicker,
+          title: MISSED_CLOCK_IN.title,
+          body: MISSED_CLOCK_IN.body(time),
+          tone: 'info',
+          sticky: true,
+          tag: CLOCK_IN_TAG,
+          action: { label: MISSED_CLOCK_IN.action(time), run: () => clockInAt(missedClockIn) },
+          sound: false,
+          notifications: false,
+        });
+      }
+      return;
+    }
+    dismissByTag(CLOCK_IN_TAG);
 
     const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone });
 
@@ -88,5 +118,5 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
         notifications: settings.notifications,
       });
     }
-  }, [dateKey, tc, settings, now, overtimeApproved, retroDone, approveOvertime, openRetro]);
+  }, [dateKey, tc, settings, now, overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt]);
 }
