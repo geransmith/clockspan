@@ -1670,8 +1670,22 @@ button {
 .timer-break-text strong {
   font-size: var(--fs-lg);
 }
-.timer-break-start {
-  align-self: center;
+/* Break and Meeting side by side; Meeting's Until row under them, its hint on a line of its own. */
+.timer-actions,
+.timer-until {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+}
+.timer-until .timefield {
+  width: auto;
+}
+.timer-until-error {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: center;
 }
 /* One column per start button; two lengths set the same make one button. */
 .timer-quick {

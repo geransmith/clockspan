@@ -1,4 +1,4 @@
-import { addDays, atTime, isoWeekday } from '../../../shared/dates.js';
+import { addDays, atTime, isoWeekday, MINUTE_MS } from '../../../shared/dates.js';
 import type { Day, Meeting, WeeklyMeeting } from '../types';
 
 /** A row of a day's Meetings card: a one-off meeting, or a weekly one as it falls that day, under its title. */
@@ -76,4 +76,20 @@ export function stopWeekly(list: readonly WeeklyMeeting[], uid: string, today: s
 /** `list` with every part of weekly meeting `uid` renamed: its title is the current one on every day, as a task's is. */
 export function renameWeekly(list: readonly WeeklyMeeting[], uid: string, title: string): WeeklyMeeting[] {
   return list.map((w) => (w.uid === uid ? { ...w, title } : w));
+}
+
+/** The furthest the timer card's Meeting runs to: a wrong Until holds the break alarm no longer than this. */
+export const MEETING_UNTIL_MAX_MINUTES = 4 * 60;
+
+/** Until's first value for a meeting started at `now`: the first :00 or :30 at least 10 minutes away. */
+export function defaultUntil(now: number): number {
+  const d = new Date(Math.ceil((now + 10 * MINUTE_MS) / MINUTE_MS) * MINUTE_MS);
+  const m = d.getMinutes();
+  d.setMinutes(m === 0 ? 0 : m <= 30 ? 30 : 60);
+  return d.getTime();
+}
+
+/** The meeting on at `now` among a day's rows, the first by start, skipped ones aside; null with none. */
+export function meetingAt(rows: readonly MeetingRow[], now: number): MeetingRow | null {
+  return rows.find((r) => !r.skipped && r.meeting.startsAt <= now && now < r.meeting.endsAt) ?? null;
 }

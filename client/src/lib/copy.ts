@@ -240,6 +240,16 @@ export const BREAK = {
   kicker: 'Break',
 } as const;
 
+/** The focus timer's meeting controls: a call started now, until a time, and the line while one is on. */
+export const MEETING = {
+  start: 'Meeting',
+  begin: 'Start Meeting',
+  end: 'End Meeting',
+  running: (title: string, until: string) => (title ? `In ${title} until ${until}` : `In a meeting until ${until}`),
+  notAfterNow: 'Pick a time after now.',
+  tooFar: 'Pick a time within 4 hours.',
+} as const;
+
 /**
  * The tab's title (`lib/title.ts`): the running session, a running break or today's next deadline,
  * with the app's name after it. These are the owner's approved strings (Option A, clock time), kept

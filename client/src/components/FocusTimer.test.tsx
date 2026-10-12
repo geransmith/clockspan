@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
 import { warnSaveFailed } from '../lib/alerts';
-import { BREAK, SAVE_FAILED } from '../lib/copy';
+import { BREAK, MEETING, SAVE_FAILED } from '../lib/copy';
 import type { CategoryPick } from '../lib/board';
 import {
   ADMIN,
@@ -16,6 +16,7 @@ import {
   echoPriorities,
   endSession,
   makeBreak,
+  makeSettings,
   makeDay,
   makePick,
   makePriority,
@@ -27,7 +28,7 @@ import {
   TICKETS,
   TODAY,
 } from '../test/hooks';
-import type { Break, Priority, SessionResponse } from '../types';
+import type { Break, Day, Meeting, Priority, SessionResponse } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PRIORITIES } from '../../../shared/settings.js';
 import { FocusTimer } from './FocusTimer';
@@ -48,7 +49,7 @@ function Card({ pick, isToday = true }: { pick: CategoryPick | null; isToday?: b
   if (!day) return null;
   return (
     <>
-      <FocusTimer date={TODAY} isToday={isToday} priorities={day.priorities} pick={pick} />
+      <FocusTimer date={TODAY} isToday={isToday} priorities={day.priorities} meetings={day.meetings} pick={pick} />
       <output aria-label="A start is out">{String(starting)}</output>
       <button onClick={() => void start(TODAY, 25 * 60, 'Board task', elsewhere.promise)}>Start elsewhere</button>
     </>
@@ -58,8 +59,13 @@ function Card({ pick, isToday = true }: { pick: CategoryPick | null; isToday?: b
 /** `n` priority rows, all ticked. */
 const ticked = (n: number) => Array.from({ length: n }, (_, i) => makePriority(i + 1, `Row ${i + 1}`, { done: true }));
 
-async function renderCard(priorities: Priority[] = [], breaks: Break[] = [], pick: CategoryPick | null = null, { isToday = true } = {}) {
-  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities, breaks })));
+async function renderCard(
+  priorities: Priority[] = [],
+  breaks: Break[] = [],
+  pick: CategoryPick | null = null,
+  { isToday = true, meetings = {} }: { isToday?: boolean; meetings?: Day['meetings'] } = {},
+) {
+  vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities, breaks, meetings })));
   render(
     <AppProviders>
       <ShortcutKeys />
@@ -593,6 +599,112 @@ describe('FocusTimer', () => {
       expect(screen.getByRole('button', { name: BREAK.end })).toBeTruthy();
       await settle(1000);
       expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Break · / }));
+    });
+  });
+
+  describe('the Meeting button', () => {
+    // T0 is 9:00 AM.
+    const at = (minutes: number) => T0 + minutes * MINUTE_MS;
+    const meetingButton = () => screen.getByRole('button', { name: MEETING.start });
+    const untilSegments = () => within(screen.getByRole('group', { name: 'Until time' })).getAllByRole('spinbutton');
+    const typeUntil = (keys: string) => {
+      act(() => untilSegments()[0]!.focus());
+      for (const data of keys)
+        act(() => {
+          document.activeElement!.dispatchEvent(new InputEvent('beforeinput', { data, inputType: 'insertText', bubbles: true, cancelable: true }));
+        });
+    };
+
+    // The route answers every meeting the day holds, as the server keeps them.
+    let held: Day['meetings'] = {};
+    beforeEach(() => {
+      held = {};
+      vi.mocked(api.putMeeting).mockImplementation((_date: string, uid: string, m: Meeting | null) => {
+        held = { ...held, [uid]: m };
+        return Promise.resolve(answered({ meetings: held }));
+      });
+      vi.mocked(api.deleteMeeting).mockImplementation((_date: string, uid: string) => {
+        const { [uid]: _cleared, ...rest } = held;
+        held = rest;
+        return Promise.resolve(answered({ meetings: held }));
+      });
+    });
+
+    it('starts a call now until the first half hour 10 minutes away, under the label typed, and ends a break that runs', async () => {
+      vi.mocked(api.endBreak).mockResolvedValue(answered({ break: null }));
+      await renderCard([], [makeBreak({ startedAt: at(-2), endedAt: at(3) })]);
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: ' Acme call ' } });
+      press(meetingButton());
+      expect(untilSegments().map((s) => s.textContent)).toEqual(['09', '30', 'AM']);
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: MEETING.begin }));
+      press(screen.getByRole('button', { name: MEETING.begin }));
+      await settle();
+      expect(api.putMeeting).toHaveBeenCalledExactlyOnceWith(TODAY, expect.stringMatching(/^[0-9a-f]{32}$/), {
+        title: 'Acme call',
+        startsAt: T0,
+        endsAt: at(30),
+      });
+      expect(api.endBreak).toHaveBeenCalledOnce();
+      expect(screen.getByText('In Acme call until 9:30 AM')).toBeTruthy();
+      expect(screen.getByRole('timer').textContent).toBe('30:00');
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: MEETING.end }));
+      expect(screen.queryByRole('button', { name: MEETING.start })).toBeNull();
+    });
+
+    it('takes an Until only after now and within 4 hours, and Cancel hands the focus back', async () => {
+      await renderCard();
+      press(meetingButton());
+      typeUntil('845');
+      expect(screen.getByText(MEETING.notAfterNow)).toBeTruthy();
+      expect((screen.getByRole('button', { name: MEETING.begin }) as HTMLButtonElement).disabled).toBe(true);
+      typeUntil('115');
+      act(() => untilSegments()[2]!.focus());
+      act(() => {
+        document.activeElement!.dispatchEvent(new InputEvent('beforeinput', { data: 'p', inputType: 'insertText', bubbles: true, cancelable: true }));
+      });
+      expect(screen.getByText(MEETING.tooFar)).toBeTruthy();
+      press(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('group', { name: 'Until time' })).toBeNull();
+      expect(document.activeElement).toBe(meetingButton());
+      expect(api.putMeeting).not.toHaveBeenCalled();
+    });
+
+    it('ends a meeting now, hands the focus to Meeting, and drops one ended in its first minute', async () => {
+      held = { a: { title: '', startsAt: at(-10), endsAt: at(20) }, b: { title: 'Slip', startsAt: at(30), endsAt: at(40) } };
+      await renderCard([], [], null, { meetings: held });
+      expect(screen.getByText('In a meeting until 9:20 AM')).toBeTruthy();
+      press(screen.getByRole('button', { name: MEETING.end }));
+      await settle();
+      expect(api.putMeeting).toHaveBeenLastCalledWith(TODAY, 'a', { title: '', startsAt: at(-10), endsAt: T0 });
+      expect(document.activeElement).toBe(meetingButton());
+      vi.setSystemTime(at(30) + 30_000);
+      await settle(1000);
+      press(screen.getByRole('button', { name: MEETING.end }));
+      await settle();
+      expect(api.deleteMeeting).toHaveBeenCalledExactlyOnceWith(TODAY, 'b');
+    });
+
+    it('ends a weekly meeting on this day only, keeping no title of its own, and skips one ended in its first minute', async () => {
+      // TODAY, 2026-09-28, is a Monday.
+      const standup = { uid: 'stand000', title: 'Standup', weekdays: [1], start: 8 * 60 + 50, end: 9 * 60 + 15, since: '2026-09-01', until: null };
+      vi.mocked(api.getSettings).mockResolvedValue(answered(makeSettings({ meetings: [standup] })));
+      await renderCard();
+      expect(screen.getByText('In Standup until 9:15 AM')).toBeTruthy();
+      press(screen.getByRole('button', { name: MEETING.end }));
+      await settle();
+      expect(api.putMeeting).toHaveBeenCalledExactlyOnceWith(TODAY, 'stand000', { title: null, startsAt: at(-10), endsAt: T0 });
+      cleanup();
+      vi.mocked(api.putMeeting).mockClear();
+      vi.setSystemTime(at(-10) + 30_000);
+      await renderCard();
+      press(screen.getByRole('button', { name: MEETING.end }));
+      await settle();
+      expect(api.putMeeting).toHaveBeenCalledExactlyOnceWith(TODAY, 'stand000', null);
+    });
+
+    it('offers no Meeting off today', async () => {
+      await renderCard([], [], null, { isToday: false });
+      expect(screen.queryByRole('button', { name: MEETING.start })).toBeNull();
     });
   });
 });
