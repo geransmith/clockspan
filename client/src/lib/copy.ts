@@ -214,10 +214,13 @@ export const FINISH_CHOICE = {
   back: 'Back',
 } as const;
 
-/** The alert when a timer that ran out got no answer and was logged at its planned length. */
+/** The kicker of the two banners a session that ended without the user raises, which then stay until closed. */
+export const TIMER_KICKER = 'Focus timer';
+
+/** The alert when a timer that ran out got no answer and was logged at its planned length; `over` is the time past it. */
 export const TIMER_DONE = {
   title: 'Focus Session Complete',
-  body: (name: string, duration: string) => named(name, `${duration} logged.`),
+  body: (name: string, logged: string, over: string) => named(name, `${logged} logged, the planned length. The ${over} after it aren't counted.`),
 } as const;
 
 /** Banner when a pause was left for an hour: the session was closed where the pause began. */
@@ -226,13 +229,14 @@ export const TIMER_PAUSED_OUT = {
   body: (name: string, duration: string) => named(name, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
 } as const;
 
-/** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
+/** The focus timer's break: the button, the line while it runs, and the banner when it's over, with its kicker. */
 export const BREAK = {
   start: (minutes: number, long: boolean) => `${long ? 'Long Break' : 'Break'} · ${minutes} min`,
   running: (until: string) => `Break until ${until}`,
   end: 'End Break',
   over: "Break's Over",
   overBody: 'Pick the next thing, or start a timer.',
+  kicker: 'Break',
 } as const;
 
 /**

@@ -3,7 +3,7 @@ import { act, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
-import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
+import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_KICKER, TIMER_PAUSED_OUT } from '../lib/copy';
 import { formatCountdown } from '../lib/format';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import {
@@ -195,7 +195,7 @@ describe("the running session's name", () => {
     await renderOnRow(startedAgo(34.9, { priorityUid: 'u1' }));
     vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(35, { priorityUid: 'u1' }), { durationSeconds: 1500 }) }));
     await settle(6000);
-    expect(alert).toHaveBeenLastCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Ship the fix', '25m') }));
+    expect(alert).toHaveBeenLastCalledWith(expect.objectContaining({ title: TIMER_DONE.title, body: TIMER_DONE.body('Ship the fix', '25m', '10 min') }));
   });
 
   it('names the session by its row when a pause left for an hour closes it', async () => {
@@ -605,7 +605,7 @@ describe('pause and resume', () => {
     await settle();
   });
 
-  it('closes a pause left for an hour, quietly, logging the time before it', async () => {
+  it('closes a pause left for an hour, quietly, logging the time before it, and keeps that up until closed', async () => {
     const { result } = await renderRunning(startedAgo(70, { pausedAt: T0 - 59 * MINUTE_MS, label: '' }));
     expect(api.finishSession).not.toHaveBeenCalled();
     vi.mocked(api.finishSession).mockResolvedValue(
@@ -617,7 +617,65 @@ describe('pause and resume', () => {
     expect(api.finishSession).toHaveBeenCalledWith(1, false, { plannedSeconds: 1500, pausedAt: T0 - 59 * MINUTE_MS });
     expect(result.current.timer.running).toBeNull();
     expect(alert).toHaveBeenCalledWith(
-      expect.objectContaining({ title: TIMER_PAUSED_OUT.title, body: TIMER_PAUSED_OUT.body('', '11m'), sound: false, notifications: false }),
+      expect.objectContaining({
+        kicker: TIMER_KICKER,
+        title: TIMER_PAUSED_OUT.title,
+        body: TIMER_PAUSED_OUT.body('', '11m'),
+        sticky: true,
+        sound: false,
+        notifications: false,
+      }),
     );
+  });
+});
+
+describe("a session's ending", () => {
+  /**
+   * A session found past its grace and finished on its own, with nothing running on the server
+   * after it. Every poll answered the session until now, and the first sync took 'timer-complete'
+   * down as it showed it.
+   */
+  async function autoFinished() {
+    vi.mocked(api.finishSession).mockResolvedValue(answered({ session: endSession(startedAgo(45)) }));
+    const r = await renderRunning(startedAgo(45));
+    await settle();
+    expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: TIMER_DONE.title, tag: 'timer-complete', sticky: true }));
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
+    vi.mocked(dismissByTag).mockClear();
+    return r;
+  }
+
+  it('stays up until a session starts on this page', async () => {
+    const { result } = await autoFinished();
+    await settle(MINUTE_MS);
+    expect(dismissByTag).not.toHaveBeenCalledWith('timer-complete');
+    vi.mocked(api.startSession).mockResolvedValue(answered({ session: makeSession({ id: 2, startedAt: Date.now() }) }));
+    await act(() => result.current.timer.start(TODAY, 1500, 'Next'));
+    expect(dismissByTag).toHaveBeenCalledWith('timer-complete');
+  });
+
+  it('comes down when a sync shows a session another device started', async () => {
+    const { result } = await autoFinished();
+    await settle(MINUTE_MS);
+    expect(dismissByTag).not.toHaveBeenCalledWith('timer-complete');
+    vi.mocked(api.getRunning).mockResolvedValueOnce(answered({ session: makeSession({ id: 2, startedAt: Date.now() }) }));
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running?.id).toBe(2);
+    expect(dismissByTag).toHaveBeenCalledWith('timer-complete');
+  });
+
+  it('is not raised when a sync showed another session before the finish answered', async () => {
+    const finished = deferredAnswer<SessionResponse>();
+    vi.mocked(api.finishSession).mockReturnValueOnce(finished.promise);
+    const { result } = await renderRunning(startedAgo(45));
+    expect(api.finishSession).toHaveBeenCalledOnce();
+    // Finished and followed by the next session on another device meanwhile.
+    vi.mocked(api.getRunning).mockResolvedValue(answered({ session: makeSession({ id: 2, startedAt: Date.now() }) }));
+    await settle(MINUTE_MS);
+    expect(result.current.timer.running?.id).toBe(2);
+    finished.resolve({ session: endSession(startedAgo(45)) });
+    await settle();
+    expect(alert).not.toHaveBeenCalledWith(expect.objectContaining({ title: TIMER_DONE.title }));
+    expect(result.current.timer.running?.id).toBe(2);
   });
 });

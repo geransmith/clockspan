@@ -7,7 +7,9 @@ import { dismissByTag, offerNotifications, unlockAudio } from '../lib/alerts';
  * notifications (once per device, `offerNotifications`) before `onStart`, since iOS and Safari
  * count only the tap as the gesture and a start may wait on a save first (a new name's row, a
  * board pull). It also takes the break banners down: their Start Break goes out on the day
- * store's queue, not the timer's, and the disabled buttons don't reach it.
+ * store's queue, not the timer's, and the disabled buttons don't reach it. The tap also takes the
+ * timer's ending banners down (`'timer-complete'`), so the stack clears from the tap rather than
+ * only once the start answers.
  */
 export function TimerLengths({ onStart, disabled }: { onStart: (minutes: number) => void; disabled: boolean }) {
   const { settings, loaded } = useSettings();
@@ -16,6 +18,7 @@ export function TimerLengths({ onStart, disabled }: { onStart: (minutes: number)
     unlockAudio();
     offerNotifications(loaded && settings.notifications);
     dismissByTag('break');
+    dismissByTag('timer-complete');
     onStart(minutes);
   };
   return (
