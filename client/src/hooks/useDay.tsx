@@ -124,6 +124,8 @@ interface DayStore {
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
   setRetro: (date: string, patch: api.RetroPatch) => Promise<boolean>;
+  /** Stamps the day's morning offer answered, for every device; a day already stamped keeps its first stamp. */
+  setOfferAnswered: (date: string) => Promise<boolean>;
   /** A session the server has just confirmed at `revision` (the timer started, finished, paused or cancelled it). */
   applySession: (session: Session, revision: number) => void;
   removeSession: (date: string, id: number) => Promise<boolean>;
@@ -541,6 +543,18 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [putDayFields],
   );
 
+  const setOfferAnswered = useCallback(
+    (date: string) => {
+      const stamp = Date.now();
+      return putDayFields(
+        date,
+        (d) => ({ ...d, offerAnsweredAt: d.offerAnsweredAt ?? stamp }),
+        () => api.putOffer(date),
+      );
+    },
+    [putDayFields],
+  );
+
   const setOvertimeApproved = useCallback(
     (date: string, approved: boolean) =>
       putDayFields(
@@ -727,6 +741,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setSnoozedUntil,
       setWorkMinutes,
       setRetro,
+      setOfferAnswered,
       applySession,
       removeSession,
       updateSession,
@@ -750,6 +765,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setSnoozedUntil,
       setWorkMinutes,
       setRetro,
+      setOfferAnswered,
       applySession,
       removeSession,
       updateSession,

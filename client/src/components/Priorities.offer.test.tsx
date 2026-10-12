@@ -88,7 +88,7 @@ describe('Priorities: the morning offer', () => {
     expect(over()).toBe(TODAY_OFFER.over(1));
   });
 
-  it('adds what is ticked in one save, the leftovers first and the routines after the padded rows, and answers every item shown', async () => {
+  it('adds what is ticked in one save, the leftovers first and the routines after the padded rows, and answers the day once the save is in', async () => {
     perDay(2);
     const answer = vi.fn();
     const leftovers = [seed('Invoices'), seed('Email')];
@@ -108,15 +108,15 @@ describe('Priorities: the morning offer', () => {
       [5, 'Follow-ups', FOLLOW_UPS.uid, true],
     ]);
     expect(saved()[3]).toMatchObject({ addedAt: T0, categoryUid: FILED_QUEUE.categoryUid });
-    // Standup notes was shown and left unticked: answered all the same.
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FILED_QUEUE.uid, FOLLOW_UPS.uid, STANDUP.uid], true);
+    // Standup notes was shown and left unticked: the day is answered all the same.
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
     expect(document.activeElement).toBe(textbox(1));
     // The leftovers go with the one-off written, and the routines added with their rows; the sheet
-    // then hands down no Standup notes, answered (the Sheet tests).
+    // then hands down no offer at all, the day answered (the Sheet tests).
     expect(shown()).toEqual(['Standup notes']);
   });
 
-  it('adds Up next after the leftovers, in the free rows before the routines, and answers it as Start fresh does', async () => {
+  it('adds Up next after the leftovers, in the free rows before the routines, and answers the day once', async () => {
     perDay(1);
     const answer = vi.fn();
     const upNext = [seed('Follow up'), seed('Draft the rota'), seed('Write a KB')];
@@ -133,14 +133,14 @@ describe('Priorities: the morning offer', () => {
     ]);
     expect(document.activeElement).toBe(textbox(1));
     await settle();
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FILED_QUEUE.uid], true);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
   });
 
-  it('is Start fresh with only Up next shown, which holds it for the day', async () => {
+  it('is Start fresh with only Up next shown, which answers the day at once', async () => {
     const answer = vi.fn();
     await withOffer([], offerOf({ upNext: [seed('Follow up')], answer }));
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith([], true);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
   });
 
   it("answers nothing when Add's save fails, and shows the notice again", async () => {
@@ -173,8 +173,8 @@ describe('Priorities: the morning offer', () => {
     expect(saved()[0]).toMatchObject({ position: 1, done: false, addedAt: T0, listed: 1, logged: 600 });
     expect(document.activeElement).toBe(textbox(1));
     await settle();
-    // Start fresh then holds, so taking a row off again offers nothing back.
-    expect(answer).toHaveBeenCalledExactlyOnceWith([], true);
+    // The day is answered, so taking a row off again offers nothing back.
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('puts the focus on the leftover it filled, past a routine kept ahead of it', async () => {
@@ -190,7 +190,7 @@ describe('Priorities: the morning offer', () => {
     expect(document.activeElement).toBe(textbox(4));
   });
 
-  it('with nothing ticked, adds no row, answers every item shown and puts the focus where a new priority goes', async () => {
+  it('with nothing ticked, adds no row, answers the day once and puts the focus where a new priority goes', async () => {
     const answer = vi.fn();
     const { saved } = await withOffer(
       [emptyRow(1), routineRow(2, makeRecurring('rcur00000009', 'Weekly report'))],
@@ -200,22 +200,22 @@ describe('Priorities: the morning offer', () => {
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.add }));
     expect(saved().map((p) => p.text)).toEqual(['', 'Weekly report', '']);
     await settle();
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FILED_QUEUE.uid], false);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
     expect(document.activeElement).toBe(textbox(1));
   });
 
-  it('answers every item shown with Not today, saving nothing, and puts the focus where a new priority goes', async () => {
+  it('answers the day once with Not today, saving nothing, and puts the focus where a new priority goes', async () => {
     const answer = vi.fn();
     const leftovers = [seed('Invoices')];
     const { onChange } = await withOffer([routineRow(1, STANDUP)], offerOf({ leftovers: left(leftovers), recurring: [FILED_QUEUE, FOLLOW_UPS], answer }));
     fireEvent.click(box('Follow-ups'));
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FILED_QUEUE.uid, FOLLOW_UPS.uid], true);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
     expect(onChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(textbox(2));
   });
 
-  it('is Start fresh with only leftovers shown, and answers no routine', async () => {
+  it('is Start fresh with only leftovers shown, and answers the day once', async () => {
     const answer = vi.fn();
     // Every row is a routine's: no free row, so the focus goes to Add Priority.
     const routines = [FILED_QUEUE, FOLLOW_UPS, STANDUP].map((item, i) => routineRow(i + 1, item));
@@ -223,7 +223,7 @@ describe('Priorities: the morning offer', () => {
     expect(screen.queryByRole('button', { name: TODAY_OFFER.notToday })).toBeNull();
     expect(screen.queryByText(TODAY_OFFER.recurring)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: LEFT_OPEN.dismiss }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith([], true);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add Priority' }));
   });
 
@@ -235,17 +235,17 @@ describe('Priorities: the morning offer', () => {
     expect(screen.queryByText(TODAY_OFFER.upNext)).toBeNull();
     expect(shown()).toEqual(['Monitor the queue']);
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FILED_QUEUE.uid], false);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
   });
 
-  it('keeps the leftovers while the list holds only routines, and drops a routine a row with text holds, answering only those shown', async () => {
+  it('keeps the leftovers while the list holds only routines, and drops a routine a row with text holds, answering the day once', async () => {
     const answer = vi.fn();
     await withOffer([routineRow(1, FILED_QUEUE)], offerOf({ leftovers: left([seed('Invoices')]), recurring: [FILED_QUEUE, FOLLOW_UPS], answer }));
     expect(screen.getByText(LEFT_OPEN.title('Yesterday'))).toBeTruthy();
     expect(shown()).toEqual(['Invoices', 'Follow-ups']);
-    // The queue's row could still be removed today, and the notice offer it again.
+    // Once the day is answered, taking the queue's row off offers nothing again.
     fireEvent.click(screen.getByRole('button', { name: TODAY_OFFER.notToday }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith([FOLLOW_UPS.uid], true);
+    expect(answer).toHaveBeenCalledExactlyOnceWith();
   });
 
   it('shows nothing with every routine on the list and no leftover, and comes back for an item read later', async () => {

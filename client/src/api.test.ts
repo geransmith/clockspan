@@ -98,6 +98,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['putSnooze', () => api.putSnooze(TODAY, 'lunchBy', 5), 'PUT', `/api/days/${TODAY}/snooze`, { alarm: 'lunchBy', until: 5 }],
   ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
+  ['putOffer', () => api.putOffer(TODAY), 'PUT', `/api/days/${TODAY}/offer`, undefined],
   ['getRange', () => api.getRange('2026-09-01', TODAY), 'GET', `/api/days/range?from=2026-09-01&to=${TODAY}`, undefined],
   ['getPruneInfo', () => api.getPruneInfo('2025-09-28'), 'GET', '/api/days/prune?before=2025-09-28', undefined],
   ['pruneDays', () => api.pruneDays('2025-09-28'), 'POST', '/api/days/prune', { before: '2025-09-28' }],

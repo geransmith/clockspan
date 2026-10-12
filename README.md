@@ -53,7 +53,7 @@
 
 **Salaried or exempt.** *Settings → Timeclock* has a switch for each part that may not apply: *Meal periods* (then *Lunch punches* to hide the lunch rows too), *Overtime* and *Show hours*. If you don't punch at all, hide the timeclock card; the rest of the sheet works without it.
 
-**Two devices.** With the app open on a laptop and a phone, a change saved on one shows on the other within a second. Priority lists merge row by row; for a task's name, category or note the later change wins. There is one timer, and each device raises its own alarms.
+**Two devices.** With the app open on a laptop and a phone, a change saved on one shows on the other within a second. Priority lists merge row by row; for a task's name, category or note the later change wins. There is one timer, and each device raises its own alarms. Answering the morning offer on one answers it on the other.
 
 **Sign-in and data.** Per-user sheets, history, boards, settings and layout. Sign-in is optional: run it open on your LAN, create local accounts, or sign in through an OIDC provider such as Authentik. Old days can be deleted by hand or pruned automatically after a number of days you choose, with an optional server-wide ceiling (`RETENTION_DAYS`). *Reset All Settings* puts the settings back and leaves days and the board alone.
 

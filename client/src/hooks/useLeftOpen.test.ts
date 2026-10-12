@@ -19,7 +19,6 @@ const render = (today = TODAY, wanted = true) =>
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
-  localStorage.clear();
 });
 
 it("offers the last planned day's unticked rows from the two weeks before today", async () => {
@@ -67,6 +66,23 @@ it('offers nothing when the fetch fails', async () => {
   expect(result.current).toMatchObject({ leftOpen: null, planned: null });
 });
 
+it('is settled once the read answers or fails, and while it is not wanted, never while it is out', async () => {
+  const read = deferredAnswer<{ days: Day[] }>();
+  vi.mocked(api.getRange).mockReturnValueOnce(read.promise).mockRejectedValueOnce(new Error('Request failed (500)'));
+  const { result, rerender } = render(TODAY, false);
+  expect(result.current.settled).toBe(true);
+  rerender({ today: TODAY, wanted: true });
+  expect(result.current.settled).toBe(false);
+  read.resolve({ days: [friday] });
+  await settle();
+  expect(result.current.settled).toBe(true);
+  // A new day reads again, and a failed read settles it too.
+  rerender({ today: '2026-09-29', wanted: true });
+  expect(result.current.settled).toBe(false);
+  await settle();
+  expect(result.current).toMatchObject({ leftOpen: null, planned: null, settled: true });
+});
+
 it('drops an answer that arrives after the offer stopped being wanted', async () => {
   const late = deferredAnswer<{ days: Day[] }>();
   vi.mocked(api.getRange)
@@ -80,24 +96,6 @@ it('drops an answer that arrives after the offer stopped being wanted', async ()
   await settle();
   expect(api.getRange).toHaveBeenCalledTimes(2);
   expect(result.current.leftOpen).toBeNull();
-});
-
-it('keeps "Start fresh" for the rest of the day, across a reload', async () => {
-  vi.mocked(api.getRange).mockResolvedValue(answered({ days: [friday] }));
-  const { result, rerender, unmount } = render();
-  await settle();
-  act(() => result.current.dismiss());
-  rerender({ today: TODAY, wanted: true });
-  expect(result.current).toMatchObject({ leftOpen: null, planned: null });
-  unmount();
-  const again = render();
-  await settle();
-  expect(again.result.current).toMatchObject({ leftOpen: null, planned: null });
-  expect(api.getRange).toHaveBeenCalledTimes(1);
-  // The next day offers again.
-  again.rerender({ today: '2026-09-29', wanted: true });
-  await settle();
-  expect(again.result.current.leftOpen?.date).toBe('2026-09-25');
 });
 
 it("follows a row ticked on that day's sheet since, with no second fetch", async () => {

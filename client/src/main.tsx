@@ -4,11 +4,16 @@ import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { unlockAudio } from './lib/alerts';
 import { reloadForNewBuild } from './lib/reload';
+import { pruneStored } from './lib/storage';
 import { applyTheme, storedTheme } from './lib/theme';
 import './styles.css';
 
 // The theme this device used last, before the settings arrive, so a forced one doesn't flash.
 applyTheme(storedTheme());
+// Retired: the morning offer's answer is stored on the day now (`Day.offerAnsweredAt`), so nothing
+// reads what an earlier version kept here. Finds nothing after the first load.
+pruneStored('focus:recurring-answered');
+pruneStored('focus:left-open-dismissed');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

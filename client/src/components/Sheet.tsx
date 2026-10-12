@@ -3,7 +3,6 @@ import { useBoardState, useBoardStore, useCategoryPick } from '../hooks/useBoard
 import { useDay } from '../hooks/useDay';
 import { useLeftOpen } from '../hooks/useLeftOpen';
 import { useRange } from '../hooks/useRange';
-import { useRecurringAnswered } from '../hooks/useRecurringAnswered';
 import type { Route } from '../hooks/useRoute';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
@@ -67,9 +66,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
   // due today. A leftover the board holds in Later or as done stays there. Up Next waits for the
   // leftovers' read and leaves out the last plan's tasks, so no task is offered twice, and takes
   // only the tasks the server has confirmed, as the routines do; until the board has loaded,
-  // nothing is offered.
-  const { leftOpen, planned, dismiss: dismissLeftOpen } = useLeftOpen(today, isToday && day != null && !day.priorities.some(isOneOff));
-  const { answered, answer: answerRecurring } = useRecurringAnswered(today);
+  // nothing is offered. A day whose offer was answered, on any device, offers nothing and makes no
+  // lookback read. The notice waits for that read too (answered, failed or never made), so an
+  // answer stamps only what was shown, unless that read failed or was never made.
+  const answered = day?.offerAnsweredAt != null;
+  const { leftOpen, planned, settled } = useLeftOpen(today, isToday && day != null && !answered && !day.priorities.some(isOneOff));
   const { board, confirmedRecurring, confirmedCards } = useBoardState();
   const boardStore = useBoardStore();
   // The category chip on the cards that offer one; null until the board's first read, and then no chip shows.
@@ -195,15 +196,12 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
               return edit === 'skipped' ? saved(unlessGone(boardStore.editItem(uid, { note }))) : edit !== 'failed';
             }}
             offer={
-              isToday
+              isToday && !answered && settled
                 ? {
                     leftovers: leftOpen && leftovers?.length ? { from: dayName(leftOpen.date, today), rows: leftovers } : null,
                     upNext: planned && confirmedCards ? topOfNext(confirmedCards, planned, settings.priorityCount) : [],
-                    recurring: confirmedRecurring ? dueRecurring(confirmedRecurring, today, day.priorities, answered) : [],
-                    answer: (shownRecurring, oneOffsShown) => {
-                      answerRecurring(shownRecurring);
-                      if (oneOffsShown) dismissLeftOpen();
-                    },
+                    recurring: confirmedRecurring ? dueRecurring(confirmedRecurring, today, day.priorities) : [],
+                    answer: () => void store.setOfferAnswered(today),
                   }
                 : null
             }
