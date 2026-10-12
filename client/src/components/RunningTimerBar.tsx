@@ -35,7 +35,6 @@ export function RunningTimerBar({ session }: { session: Session }) {
   return (
     <div ref={bar} className={`running-bar${paused ? ' is-paused' : ''}${due ? ' is-due' : ''}`}>
       <div className="running-bar-inner">
-        <span className="running-dot" aria-hidden="true" />
         {linked ? (
           <span className="running-label">{name}</span>
         ) : editing ? (

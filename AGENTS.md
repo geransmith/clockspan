@@ -1188,65 +1188,74 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
 
 - TypeScript `strict` + `noUncheckedIndexedAccess`. Named exports. `_`-prefixed names are the
   only allowed unused vars.
-- CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme`
-  unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
-  two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
-  scheme and the manifest's `background_color` and `theme_color` the light one:
-  `theme-css.test.ts` checks them all). Below the token blocks every type size, weight, line height,
-  letter spacing, padding, margin, gap, corner, shadow, transition and animation timing, z-index and
-  opacity is a `var()` of a token, and no colour is written out as hex, a colour function, white or
-  black (`theme-css.test.ts` fails on either, and on a `var()` of a token never defined; a named
-  colour such as `red` gets past it, so don't write one). Take a step of a scale (`--fs-*`,
-  `--space-*`, `--radius*`, `--fw-*`, `--lh-*`, `--dur-*`); a value with a reason to sit off one is
-  a token named for it with the reason beside it (`--fs-tile`, `--fs-tab`, `--field-lh`,
-  `--dur-tick`), never a test exception. A lone 0 or 1 is fine, and a negative step is
-  `calc(-1 * var(--space-N))`. These stay literal: `@media` lines (`var()` can't be read there),
-  sizes and positions, grid tracks, borders and outlines, `@keyframes` and a control's
-  `--hit-inset`. A style value set from TSX is a `var()` string too (the drag styles' opacity).
-  The stylesheet is built **phone-base** (the base rules are the phone;
-  `@media (min-width: 640px)` and wider queries enhance; that is how the stylesheet is built, not
-  who it is for). The sheet's two columns start at `SPLIT_QUERY` (`lib/layout.ts`), which
-  `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks it is there). Every view
-  sits in one frame, `--page-w` (1240 px), which `.app`'s header and `main` take and the running
-  bar's contents read too, so a page switch leaves the header where it was: History and the
-  one-column sheet cap themselves at 828 px inside it, and the split sheet and the board take all of
-  it. Between the header and `main`, `.top-stack` spans the window: the running bar, the Later strip
-  under it, and the banners hung under them (or under the header with neither), sticky under the
-  header and at the top of the window once it scrolls away. It is a direct child of `.app`, since a
-  sticky box sticks only inside its parent, and nothing above it may set `overflow` (but `clip`), or
-  it stops sticking. The one exception is `body.no-scroll`'s `overflow: hidden` under a dialog,
-  which works only because `html` sets none, so `body`'s value goes to the viewport: an `overflow`
-  on `html` would make `body` the scroller and stop the top stack sticking. `html`'s
+- CSS: tokens on `:root` in `client/src/styles.css`, dark mode via `prefers-color-scheme` unless the
+  `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the two dark token
+  blocks must match, `index.html`'s theme-color metas repeat `--bg` for each scheme and the
+  manifest's `background_color` and `theme_color` the light one: `theme-css.test.ts` checks them
+  all). Below the token blocks every type size, weight, line height, letter spacing, padding,
+  margin, gap, corner, shadow, transition and animation timing, z-index and opacity is a `var()` of
+  a token, and no colour is written out as hex, a colour function, white or black
+  (`theme-css.test.ts` fails on either, and on a `var()` of a token never defined; a named colour
+  such as `red` gets past it, so don't write one). Take a step of a scale (`--fs-*`, `--space-*`,
+  `--radius*`, `--fw-*`, `--lh-*`, `--dur-*`); a value with a reason to sit off one is a token named
+  for it with the reason beside it (`--fs-tile`, `--fs-tab`, `--field-lh`, `--dur-tick`), never a
+  test exception. A lone 0 or 1 is fine, and a negative step is `calc(-1 * var(--space-N))`. These
+  stay literal: `@media` lines (`var()` can't be read there), sizes and positions, grid tracks,
+  borders and outlines, `@keyframes` and a control's `--hit-inset`. A style value set from TSX is a
+  `var()` string too (the drag styles' opacity). The stylesheet is built **phone-base** (the base
+  rules are the phone; `@media (min-width: 640px)` and wider queries enhance; that is how the
+  stylesheet is built, not who it is for). The sheet's two columns start at `SPLIT_QUERY`
+  (`lib/layout.ts`), which `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks
+  it is there). Every view sits in one frame, `--page-w` (1240 px), which `.app`'s header and `main`
+  take and the running bar's contents read too, so a page switch leaves the header where it was:
+  History and the one-column sheet cap themselves at 828 px inside it, and the split sheet and the
+  board take all of it. Between the header and `main`, `.top-stack` spans the window: the running
+  bar, the Later strip under it, and the banners hung under them (or under the header with neither),
+  sticky under the header and at the top of the window once it scrolls away. It is a direct child of
+  `.app`, since a sticky box sticks only inside its parent, and nothing above it may set `overflow`
+  (but `clip`), or it stops sticking. The one exception is `body.no-scroll`'s `overflow: hidden`
+  under a dialog, which works only because `html` sets none, so `body`'s value goes to the viewport:
+  an `overflow` on `html` would make `body` the scroller and stop the top stack sticking. `html`'s
   `scrollbar-gutter: stable` keeps a classic scrollbar's room on a page too short to scroll and
-  under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
-  rule is a window query, so a card in a column gets the wide-window rules at about half the width:
-  a rule that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`.
-  Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: var(--tap)` (44 px), and a compact
-  control (chip, segment, running-bar button, banner close/action, log delete, a board column's +)
-  keeps its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
-  `styles.css`, an empty `::after` reaching past its edge (a control that clips its overflow grows
-  its padding instead). Where two controls sit closer than that, each reaches half the gap. A new
-  compact control joins that block and sets its `--hit-inset` there (`theme-css.test.ts` checks).
-  A toggle's on state is styled from its ARIA attribute (`[aria-pressed='true']`,
-  `[aria-selected='true']`), never a parallel `is-on` / `is-active` class (`theme-css.test.ts`
-  checks). Inputs are 16 px (`--fs-field`) so iOS doesn't zoom. No external fonts or assets (the CSP would block
-  them anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and
-  `--safe-right` (a phone held sideways puts the notch on a side). Words in a tone's colour use its
-  `-ink` token (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode
-  text at 4.5:1 and up (`theme-css.test.ts` checks); the tone itself is for fills, borders, icons
-  and bars. A category's colour (`--cat-<id>`,
-  picked by `data-color`) is a fill only (see "A category colour" for its contrast): a dot, and
-  Review's By Category bars, solid for the time on a priority and striped in the same colour for the
-  time off the plan (No category's bar is `--text-2`, not in the test). A category's name is never
-  drawn in it, and its dot always sits beside the name, since the eight colours repeat
-  (`nextColor`); the one exception is the day log's dot, named by its `label`. `CategoryChip` is the
-  one category picker: its list is `position: fixed` inside the chip's wrapper, placed by
-  `placePopover` (`lib/popover.ts`) and scrolling inside, so no card or dialog clips it and New
-  category stays in view. The timer's label box shows its suggestions the same way (`placeList`,
-  at the box's width), so the card's height never changes. A priority row's empty chip is quiet:
-  with a mouse it shows on the row's hover or focus only, from the `(hover: hover)` rule beside the
-  chip's. So is a note button with no note (`.note-toggle--empty`) on a sheet row, unless its box
-  is open. `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
+  under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width rule
+  is a window query, so a card in a column gets the wide-window rules at about half the width: a
+  rule that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`.
+  Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: var(--tap)` (44 px),
+  and a compact control (chip, segment, running-bar button, banner close/action, log delete, a board
+  column's +) keeps its drawn size and gets the rest from the `@media (pointer: coarse)` block at
+  the end of `styles.css`, an empty `::after` reaching past its edge (a control that clips its
+  overflow grows its padding instead). Where two controls sit closer than that, each reaches half
+  the gap. A new compact control joins that block and sets its `--hit-inset` there
+  (`theme-css.test.ts` checks). A toggle's on state is styled from its ARIA attribute
+  (`[aria-pressed='true']`, `[aria-selected='true']`), never a parallel `is-on` / `is-active` class
+  (`theme-css.test.ts` checks). A pressed button, chip, segment or calendar day, and the header
+  button whose strip is open, is drawn as the ink fill `.btn-primary` has (`--text` behind
+  `--surface` text), and a selected tab as its `--text` underline, so on differs from off by more
+  than hue; a listbox's option keeps its own mark. The look is flat: a card is the one box, what
+  groups inside it is a hairline rule or nothing (a notice, the break panel and the running log row
+  are a `--surface-2` block, a tinted notice its tone's `-soft`), and only what floats (the category
+  list, banners, dialogs, a lifted board card) casts `--shadow`. The accent is kept for progress
+  lines, ticks and switches, the focus ring, Add links, a full calendar day, a drop's edge and the
+  day-complete notice. A status (`.pill`) is its word in its tone's `-ink`, unfilled. Labels draw as
+  written (no `text-transform`), weights are `normal`, `--fw-medium` and `--fw-semibold` (`strong`
+  too), and digits are tabular from `body`. Inputs are 16 px (`--fs-field`) so iOS doesn't zoom. No
+  external fonts or assets (the CSP would block them anyway). Safe-area insets via `--safe-top`,
+  `--safe-bottom`, `--safe-left` and `--safe-right` (a phone held sideways puts the notch on a
+  side). Words in a tone's colour use its `-ink` token (`--accent-ink`, `--ok-ink`, `--warn-ink`,
+  `--danger-ink`), which keeps light-mode text at 4.5:1 and up (`theme-css.test.ts` checks); the
+  tone itself is for fills, borders, icons and bars. A category's colour (`--cat-<id>`, picked by
+  `data-color`) is a fill only (see "A category colour" for its contrast): a dot, and Review's By
+  Category bars, solid for the time on a priority and striped in the same colour for the time off
+  the plan (No category's bar is `--text-2`, not in the test). A category's name is never drawn in
+  it, and its dot always sits beside the name, since the eight colours repeat (`nextColor`); the one
+  exception is the day log's dot, named by its `label`. `CategoryChip` is the one category picker:
+  its list is `position: fixed` inside the chip's wrapper, placed by `placePopover`
+  (`lib/popover.ts`) and scrolling inside, so no card or dialog clips it and New category stays in
+  view. The timer's label box shows its suggestions the same way (`placeList`, at the box's width),
+  so the card's height never changes. A priority row's empty chip is quiet: with a mouse it shows on
+  the row's hover or focus only, from the `(hover: hover)` rule beside the chip's. So is a note
+  button with no note (`.note-toggle--empty`) on a sheet row, unless its box is open.
+  `.category-chip`, `.note-toggle` and `.swatch` are in the coarse block.
 - Numeric settings inputs commit on blur or Enter, never on every keystroke (`NumberInput`);
   `DurationField` commits when focus leaves its hours / minutes pair or on Enter, so moving from
   hours to minutes saves nothing. A blank or non-numeric box puts the stored value back and
@@ -1286,8 +1295,8 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
 - **Case**: titles are Title Case and everything else is sentence case. Titles are a card's, a
   page's, a view's, a column's, a dialog's (a question too: "How Much to Log?") and a settings
   tab's; a section heading (in a card, Review, Settings, the morning notice's groups, a board
-  fold); a tile label (written so though CSS draws it in capitals); a banner's title; and every
-  button's text (chips and segments, banner and notice buttons, a busy text: "Signing In…").
+  fold); a tile label; a banner's title; and every button's text (chips and segments, banner and
+  notice buttons, a busy text: "Signing In…").
   Title Case is AP's: every word capitalized but a, an, the, and, but, or, for, nor and the
   prepositions of three letters or fewer, unless first or last ("Clock Out At", "Still Open From
   Yesterday"); a verb's particle and each part of a hyphenated word are capitalized ("Sign In",
