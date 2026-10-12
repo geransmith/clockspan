@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
-import { CHECK_PUNCHES, LOAD_FAILED } from '../lib/copy';
+import { CHECK_PUNCHES, LOAD_FAILED, NO_CLOCK_OUT } from '../lib/copy';
 import { formatMonth } from '../lib/format';
 import { answered, makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
 import { Calendar } from './Calendar';
@@ -94,6 +94,21 @@ describe('Calendar', () => {
     expect(cell.querySelector('.calendar-bar')).toBeNull();
     fireEvent.click(cell);
     expect(screen.getByText(CHECK_PUNCHES)).toBeTruthy();
+    expect(screen.getByText('Worked').parentElement!.textContent).toContain('—');
+  });
+
+  it('shows No clock-out for an earlier day left clocked in, in place of its hours', async () => {
+    serveRange([makeDay('2026-09-29', { punches: punchesAt(new Date(2026, 8, 29, 9).getTime()) })]);
+    const view = render(calendar(LAST, LAST_EVENING));
+    await settle();
+    const cell = view.container.querySelector<HTMLElement>('[data-date="2026-09-29"]')!;
+    expect(cell.getAttribute('aria-label')).toMatch(/, no clock-out$/);
+    const worked = cell.querySelector<HTMLElement>('.calendar-worked')!;
+    expect(worked.textContent).toBe('—');
+    expect(worked.title).toBe(NO_CLOCK_OUT);
+    expect(cell.querySelector('.calendar-bar')).toBeNull();
+    fireEvent.click(cell);
+    expect(screen.getByText(NO_CLOCK_OUT)).toBeTruthy();
     expect(screen.getByText('Worked').parentElement!.textContent).toContain('—');
   });
 

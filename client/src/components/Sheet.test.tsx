@@ -329,7 +329,9 @@ describe("Sheet: the timeclock card's state", () => {
 describe('Sheet: the punch-order notice while a pair is typed in', () => {
   // Clocked in at 8:00, lunch from 12:00 to 12:30, a break from 10:00 to 10:15 (Out 1 / In 1, before
   // lunch) and, in the rows before it, an empty pair after lunch (Out 2 / In 2). Its Out typed as
-  // 11:00 belongs before lunch, and leaves Lunch out with no In before it.
+  // 11:00 belongs before lunch, and leaves Lunch out with no In before it. The sheet is shown at
+  // 13:00: until the clock reaches Lunch out, that slip waits.
+  const AFTER_LUNCH_OUT = T0 + 4 * HOUR_MS;
   const punches = (out2: number | null) => punchesAt(T0 - HOUR_MS, T0 + 3 * HOUR_MS, T0 + 3.5 * HOUR_MS, out2, null, T0 + HOUR_MS, T0 + 1.25 * HOUR_MS);
   const labels = () => [...document.querySelectorAll('.punch-label')].map((l) => l.textContent);
   const focusOut2 = () =>
@@ -348,7 +350,7 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     const { result } = renderHook(() => useDayStore(), {
       wrapper: ({ children }) => (
         <AppProviders>
-          <SheetAt />
+          <SheetAt now={AFTER_LUNCH_OUT} />
           {children}
         </AppProviders>
       ),
@@ -390,7 +392,7 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     );
     const { rerender } = render(
       <AppProviders>
-        <SheetAt />
+        <SheetAt now={AFTER_LUNCH_OUT} />
       </AppProviders>,
     );
     await settle();
@@ -399,7 +401,7 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     // A new date mounts the card again, with no blur from the field that went.
     rerender(
       <AppProviders>
-        <SheetAt date={YESTERDAY} />
+        <SheetAt date={YESTERDAY} now={AFTER_LUNCH_OUT} />
       </AppProviders>,
     );
     await settle();
@@ -407,7 +409,7 @@ describe('Sheet: the punch-order notice while a pair is typed in', () => {
     expect(screen.getByText(PUNCH_ORDER('Lunch out', '12:00 PM', 'In 1', null))).toBeTruthy();
     rerender(
       <AppProviders>
-        <SheetAt />
+        <SheetAt now={AFTER_LUNCH_OUT} />
       </AppProviders>,
     );
     await settle();

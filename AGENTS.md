@@ -299,9 +299,16 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
-  else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
-  `TimerLengths`, on the timer card and a board card's dialog, `useBreak`'s `start`, every
-  punch commit, the timer's Done and the shortcut listener, for a timer key, do this) for iOS.
+  else. `unlockAudio()` must be called from a user gesture for iOS: the capture-phase `pointerup`
+  and `keydown` listeners in `main.tsx` call it on every tap and key, since iOS suspends audio
+  again in the background, and the per-control calls stay (the timer's length buttons,
+  `TimerLengths`, on the timer card and a board card's dialog, `useBreak`'s `start`, every punch
+  commit, the timer's Done and the shortcut listener, for a timer key), where their tests prove
+  the unlock inside the tap. `offerNotifications` asks for notification permission once per device
+  (`focus:notifications-asked`, not a `USER_KEYS` entry: the permission is the browser's), inside
+  the tap and once the settings have loaded, from today's Clock in, the Not Clocked In banner's
+  "Clock In at …" and `TimerLengths`' tap; the only other ask is Allow in Settings → Alarms, which
+  counts as that one too and is the way back after a dismissal.
   What plays is `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and `none` is the per-event off. A
   celebration (day complete and work week reached in `Timeclock.tsx`, a priority ticked in
@@ -419,9 +426,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   goes with the base of the oldest list not sent yet, so it carries every change since. That needs
   every list that takes a waiting one's place to be built on `current()`: the Priorities card
   flushes its draft and a row's note on blur, before any other sheet control acts, and
-  `setPunches` and `editPriorities` (which `addPriority` and a row's note go through) build on
-  `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the breaks
-  (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
+  `setPunches`, `editPunches` and `editPriorities` (which `addPriority` and a row's note go through)
+  build on `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the
+  breaks (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
   session's writes one at a time on its own queue: start, adjust, edit, pause, resume, finish and
   cancel, the log's edits of the running row included. That queue is not ordered against the day
   store's `session:<id>` queue, which carries the other rows' edits and deletes. Three jobs wait
@@ -446,8 +453,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
   chronologically; `extraPairs()` only decides where the card *shows* a pair. Today a time typed
-  ahead of now counts once the clock reaches it (its order is checked at once); a past day counts
-  every time it has. Today ends only at the Clock out, when it is the latest punch reached, with the
+  ahead of now counts once the clock reaches it (its order is checked at once, except that an Out
+  typed ahead right after a Lunch out or an extra pair's Out whose own In is still empty waits for
+  the clock to reach it); a past day counts every time it has. Today ends only at the Clock out,
+  when it is the latest punch reached, with the
   target met or not; an extra pair's Out is a break, the second meal included, and never ends it. A
   past day ends once it is off the clock. "Add Extra Out / In" appends two rows, so the old Clock
   out becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
@@ -459,7 +468,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the one it should come after) are named by the sheet's notice (`PUNCH_ORDER`), which describes
   that row's field; such a day counts in no hours total (the week line, Review's worked time and
   target) and shows a dash and `CHECK_PUNCHES` wherever its own hours would show (the sheet's tiles,
-  the board's clock bar, History's cell and day panel).
+  the board's clock bar, History's cell and day panel). A past day still clocked in with its punches
+  in order (`unclosed`) also counts in no hours total, shows a dash and `NO_CLOCK_OUT` wherever its
+  own hours would show (the sheet's Worked tile, History's cell and day panel), and the week line
+  names it last ("· Tue has no clock-out").
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server
@@ -749,37 +761,37 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`Session.firstPlannedSeconds`) with 3 or more sessions finished by hand (`ranSeconds`, which the
   server leaves null for the auto-finish, a running or cancelled session and older rows) and gives
   its median run, today's sessions included, for at most two lengths, the most used first; Review
-  shows it for a Week or a Month too. The Days tile's target is `periodTarget`: a Week's is the
-  Work week setting, as on the timeclock's week line, and a Month's or a Quarter's is
-  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings`. Not Done groups
-  the one-off rows left open by their task (`addToNotDone`; `OpenPriority.key` is the uid of the
-  task that opened the entry): a tick settles that task's earlier open days. A one-off typed again
-  by hand on a later day is a new task, so a narrow text fallback keeps such rows together: a task
-  the board holds in no lane (`laned`), on its first day (`earlier === 0`), joins the latest open
-  entry of its text (`sameText`) whose last day is 1 to `LOOKBACK_DAYS` days before; a tick ends
-  that entry, and such a tick also settles an open row of its text on the same day. Its later days
-  follow the entry it joined, so carrying it on doesn't regroup a past period. A task with a lane
-  groups by uid only, so two board tasks of one name stay two entries. An entry shows its latest
-  task's name. A recurring priority's rows (`Priority.recurring`) are priorities in every count (the
-  tiles, `midDay`, `typicalDay`, the retro card, the calendar and its stickers) but never a task in
-  Not Done, which lists one-offs only: `reviewRange` groups them by uid into `routines` (the days a
-  row had text, how many of them it was ticked, its focus; most days first, then most focus, then by
-  title), each day on its own, so a tick never settles another day's miss; a routine is titled by
-  its rows' text, its current name on every day. `reviewDay`'s `routines` (`{ done, total }`) is the
-  retro card's "routines 3 of 4". `byCategory` (`CategoryTime`) is the focus and the ticks by
-  category: each written row's focus (`seconds`) and tick (`done`) under its task's category, and
-  each session off a written row under `sessionCategory`, in `seconds` and in its `offPlanSeconds`
-  part, so a task's time on a day that no longer lists it counts off the plan under the task's
-  category. A row's category is its task's current one, so a category change moves the task's past
-  time. A uid outside `known` (the board's categories, removed ones included) counts as none, there
-  and in `midDay`. Most time first, then most ticks, none last; a category with neither is left out.
-  Review shows By Category only while it lists more than one bucket, one of them with a category
-  (one bucket would say the Focused tile again), Off the Plan only with a session (the tile says
-  none), and a section's muted count only where it adds something (Off the Plan's total over two
-  rows or more, Not Done's count above none). Review passes `known` and
-  `laned` (the uids of the tasks the board holds in Later or Next) from `useBoardState()` once the
-  board has loaded, and empty ones before, so until then nothing is grouped by category and no task
-  counts as laned in Not Done.
+  shows it for a Week or a Month too. The Days tile's target is `periodTarget`: a
+  Week's is the Work week setting, as on the timeclock's week line, and a Month's or a Quarter's is
+  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings` (a day out of
+  order or left clocked in is left out). Not Done groups the one-off rows left open by their task
+  (`addToNotDone`; `OpenPriority.key` is the uid of the task that opened the entry): a tick settles
+  that task's earlier open days. A one-off typed again by hand on a later day is a new task, so a
+  narrow text fallback keeps such rows together: a task the board holds in no lane (`laned`), on its
+  first day (`earlier === 0`), joins the latest open entry of its text (`sameText`) whose last day
+  is 1 to `LOOKBACK_DAYS` days before; a tick ends that entry, and such a tick also settles an open
+  row of its text on the same day. Its later days follow the entry it joined, so carrying it on
+  doesn't regroup a past period. A task with a lane groups by uid only, so two board tasks of one
+  name stay two entries. An entry shows its latest task's name. A recurring priority's rows
+  (`Priority.recurring`) are priorities in every count (the tiles, `midDay`, `typicalDay`, the retro
+  card, the calendar and its stickers) but never a task in Not Done, which lists one-offs only:
+  `reviewRange` groups them by uid into `routines` (the days a row had text, how many of them it was
+  ticked, its focus; most days first, then most focus, then by title), each day on its own, so a
+  tick never settles another day's miss; a routine is titled by its rows' text, its current name on
+  every day. `reviewDay`'s `routines` (`{ done, total }`) is the retro card's "routines 3 of 4".
+  `byCategory` (`CategoryTime`) is the focus and the ticks by category: each written row's focus
+  (`seconds`) and tick (`done`) under its task's category, and each session off a written row under
+  `sessionCategory`, in `seconds` and in its `offPlanSeconds` part, so a task's time on a day that
+  no longer lists it counts off the plan under the task's category. A row's category is its task's
+  current one, so a category change moves the task's past time. A uid outside `known` (the board's
+  categories, removed ones included) counts as none, there and in `midDay`. Most time first, then
+  most ticks, none last; a category with neither is left out. Review shows By Category only while it
+  lists more than one bucket, one of them with a category (one bucket would say the Focused tile
+  again), Off the Plan only with a session (the tile says none), and a section's muted count only
+  where it adds something (Off the Plan's total over two rows or more, Not Done's count above none).
+  Review passes `known` and `laned` (the uids of the tasks the board holds in Later or Next) from
+  `useBoardState()` once the board has loaded, and empty ones before, so until then nothing is
+  grouped by category and no task counts as laned in Not Done.
 - **A session is named and filed by its task.** `sessionName(s, rows)` and
   `sessionCategory(s, rows)` (`lib/retro.ts`) read the written row its task is on its day
   (`sessionRow`), so a rename or a chip changed on the sheet shows at once, else the server's
@@ -819,7 +831,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`PassFocusOnLeave`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a reload
   never re-fires. Today's fired keys live in `localStorage` under `focus:alarms`, one set for one
-  date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none.
+  date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none. The
+  missed clock-in banner's key, `clockIn:missing`, sits in the same set with no minute, so that
+  banner shows once a day per device.
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another
@@ -865,10 +879,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   acts where its button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H
   put the focus on their header button first, where a click leaves it, since the control it was on
   may go with the page. `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in
-  `App.tsx`, is the one keydown listener (nothing else in the app listens for keys on the window or
-  the document), and `shortcutFor` is its guard: their docs say which keys they leave alone and
-  why. The list is a static dialog in `Shortcuts.tsx`, its labels beside it, not a lazy chunk. The
-  setting is on by default and turns every key off (WCAG 2.1.4).
+  `App.tsx`, is the one keydown listener that acts on a key (the only other on the window or the
+  document is `main.tsx`'s audio unlock, which acts on none), and `shortcutFor` is its guard: their
+  docs say which keys they leave alone and why. The list is a static dialog in `Shortcuts.tsx`, its
+  labels beside it, not a lazy chunk. The setting is on by default and turns every key off
+  (WCAG 2.1.4).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
   `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one

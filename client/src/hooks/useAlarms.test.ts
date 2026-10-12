@@ -2,6 +2,7 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { alert, dismissByTag } from '../lib/alerts';
+import { formatTime, resolveHour12 } from '../lib/format';
 import { computeTimeclock, type TimeclockResult } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { makeSettings, punchesAt, T0, TODAY } from '../test/hooks';
@@ -20,7 +21,7 @@ interface Props {
   day: AlarmDayState;
   settings: Settings;
 }
-const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn() };
+const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn(), missedClockIn: null, clockInAt: vi.fn() };
 
 function renderAlarms(props: Partial<Props> = {}) {
   const initialProps: Props = { date: TODAY, tc: null, now: T0, day: NO_DAY, settings, ...props };
@@ -110,7 +111,8 @@ describe('clock-out and retro', () => {
     vi.mocked(dismissByTag).mockClear();
     // Approved from the card's switch (the banner's own button closes its banner itself).
     rerender({ date: TODAY, tc: overDay, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
-    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['alarm:clockOut']]);
+    // A clocked-in day takes "Not Clocked In" down on every judged tick.
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:clockOut']]);
   });
 
   it("takes the banners down when the clock-in is cleared or the day changes, and not while today's punches settle", () => {
@@ -121,14 +123,14 @@ describe('clock-out and retro', () => {
     rerender({ date: TODAY, tc: null, now: T0, day: NO_DAY, settings });
     expect(dismissByTag).not.toHaveBeenCalled();
     rerender({ date: TODAY, tc: tcAt(T0), now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
 
     // Past midnight, yesterday's banners (and their buttons) go with the day, before the new
     // day's punches have been judged.
     const next = renderAlarms({ tc: overDay });
     vi.mocked(dismissByTag).mockClear();
     next.rerender({ date: '2026-09-29', tc: null, now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {
@@ -138,5 +140,76 @@ describe('clock-out and retro', () => {
     const moved = { ...overDay, clockOutAt: overDay.clockOutAt! + 10 * MINUTE_MS };
     rerender({ date: TODAY, tc: moved, now: T0, day: { ...NO_DAY, retroDone: true }, settings });
     expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
+  });
+});
+
+describe('missed clock-in', () => {
+  // The first session started at 8:47, and no punch is set.
+  const at = T0 - 13 * MINUTE_MS;
+  const time = formatTime(at, resolveHour12(settings.timeFormat));
+  const missed = (patch: Partial<AlarmDayState> = {}): AlarmDayState => ({ ...NO_DAY, missedClockIn: at, ...patch });
+  const notClockedIn = tcAt(T0);
+  const props = (patch: Partial<Props> = {}): Props => ({ date: TODAY, tc: notClockedIn, now: T0, day: missed(), settings, ...patch });
+  const takenDown = () => vi.mocked(dismissByTag).mock.calls.filter(([tag]) => tag === 'clock-in').length;
+
+  it('raises one quiet banner whose button clocks in at the minute it names', () => {
+    const clockInAt = vi.fn();
+    renderAlarms({ tc: notClockedIn, day: missed({ clockInAt }) });
+    expect(alert).toHaveBeenCalledTimes(1);
+    const banner = vi.mocked(alert).mock.calls[0]![0];
+    expect(banner).toEqual({
+      kicker: 'Timeclock',
+      title: 'Not Clocked In',
+      body: `Today's alarms count from your clock-in. Your first session today started at ${time}.`,
+      tone: 'info',
+      sticky: true,
+      tag: 'clock-in',
+      action: { label: `Clock In at ${time}`, run: expect.any(Function) },
+      sound: false,
+      notifications: false,
+    });
+    banner.action!.run();
+    expect(clockInAt).toHaveBeenCalledWith(at);
+  });
+
+  it('raises it once a day on this device: not on the next tick, for a new first start, after a reload or in a second tab', () => {
+    const { rerender, unmount } = renderAlarms(props());
+    rerender(props({ now: T0 + 1000 }));
+    rerender(props({ day: missed({ missedClockIn: at - 5 * MINUTE_MS }) }));
+    unmount();
+    expect(localStorage.getItem('focus:alarms')).toBe(`${TODAY} clockIn:missing`);
+    renderAlarms(props());
+    expect(alert).toHaveBeenCalledTimes(1);
+
+    // Two tabs opened before the first session: the second reads what the first stored.
+    localStorage.clear();
+    vi.mocked(alert).mockClear();
+    const a = renderAlarms(props({ day: NO_DAY }));
+    const b = renderAlarms(props({ day: NO_DAY }));
+    a.rerender(props());
+    b.rerender(props());
+    expect(tags()).toEqual(['clock-in']);
+  });
+
+  it('waits while the day is not judged', () => {
+    const { rerender } = renderAlarms(props({ day: NO_DAY }));
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ tc: null }));
+    expect(alert).not.toHaveBeenCalled();
+    expect(dismissByTag).not.toHaveBeenCalled();
+  });
+
+  it('takes the banner down once clocked in, once nothing is left to offer, and on a new day, and not while the punches settle', () => {
+    const { rerender } = renderAlarms(props());
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ tc: null }));
+    expect(takenDown()).toBe(0);
+    rerender(props({ tc: tcAt(T0, at) }));
+    expect(takenDown()).toBe(1);
+    // The session was deleted.
+    rerender(props({ day: missed({ missedClockIn: null }) }));
+    expect(takenDown()).toBe(2);
+    rerender(props({ date: '2026-09-29', tc: null }));
+    expect(takenDown()).toBe(3);
   });
 });

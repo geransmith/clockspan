@@ -54,7 +54,7 @@ class FakeAudioContext {
   static failDecode = false;
   /** Off: a resume outside a tap, which the browser leaves suspended. */
   static resumeRuns = true;
-  state: 'suspended' | 'running' = 'running';
+  state: AudioContextState = 'running';
   currentTime = 10;
   destination = {};
   oscillators: FakeOscillator[] = [];
@@ -117,6 +117,7 @@ const focus = vi.fn();
 const fetchMock = vi.fn();
 const fileResponse = (ok = true, size = 3) => Promise.resolve({ ok, status: ok ? 200 : 404, arrayBuffer: () => Promise.resolve(new ArrayBuffer(size)) });
 const flush = () => new Promise((r) => setTimeout(r, 0));
+let stored: Map<string, string>;
 
 beforeEach(async () => {
   vi.resetModules();
@@ -132,7 +133,9 @@ beforeEach(async () => {
   FakeNotification.requestPermission = () => Promise.resolve('granted');
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('Notification', FakeNotification);
-  vi.stubGlobal('window', { focus });
+  vi.stubGlobal('window', { focus, isSecureContext: true });
+  stored = new Map();
+  vi.stubGlobal('localStorage', { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => void stored.set(k, v) });
   alerts = await import('./alerts');
 });
 
@@ -146,6 +149,10 @@ describe('audio', () => {
     ctx.state = 'suspended';
     alerts.unlockAudio();
     expect(ctx.resumed).toBe(1);
+    // iOS after a lock or a call.
+    ctx.state = 'interrupted';
+    alerts.unlockAudio();
+    expect(ctx.resumed).toBe(2);
   });
 
   it('gives up quietly when the context cannot be created', () => {
@@ -246,6 +253,8 @@ describe('notifications', () => {
     FakeNotification.permission = 'default';
     expect(alerts.notificationPermission()).toBe('default');
     expect(await alerts.requestNotificationPermission()).toBe('granted');
+    // Allow's ask is the device's one too.
+    expect(stored.get('focus:notifications-asked')).toBe('1');
     FakeNotification.requestPermission = () => Promise.reject(new Error('gesture required'));
     expect(await alerts.requestNotificationPermission()).toBe('default');
   });
@@ -257,6 +266,55 @@ describe('notifications', () => {
     // An alert still lands as a banner.
     alerts.alert({ title: 'Lunch', tone: 'warn', tag: 'a', sound: false, notifications: true });
     expect(alerts.getBanners().map((b) => b.title)).toEqual(['Lunch']);
+  });
+
+  it('answers insecure over plain http, before unsupported', () => {
+    vi.stubGlobal('window', { focus, isSecureContext: false });
+    expect(alerts.notificationPermission()).toBe('insecure');
+    vi.stubGlobal('Notification', undefined);
+    expect(alerts.notificationPermission()).toBe('insecure');
+  });
+
+  it('asks once per device, in the tap, and writes down that it asked', () => {
+    vi.stubGlobal('navigator', {}); // a browser without userActivation still asks
+    const requestPermission = vi.fn(() => Promise.resolve<NotificationPermission>('granted'));
+    FakeNotification.requestPermission = requestPermission;
+    FakeNotification.permission = 'default';
+    alerts.offerNotifications(true);
+    // Before any await: Safari takes the request only inside the gesture.
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(stored.get('focus:notifications-asked')).toBeDefined();
+    // Still 'default' (dismissed): never asked again from a tap.
+    alerts.offerNotifications(true);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it('asks nothing with the switch off, an answer given, no way to ask, or outside a gesture', () => {
+    const requestPermission = vi.fn(() => Promise.resolve<NotificationPermission>('granted'));
+    FakeNotification.requestPermission = requestPermission;
+    FakeNotification.permission = 'default';
+    alerts.offerNotifications(false);
+    for (const permission of ['granted', 'denied'] as const) {
+      FakeNotification.permission = permission;
+      alerts.offerNotifications(true);
+    }
+    FakeNotification.permission = 'default';
+    vi.stubGlobal('navigator', { userActivation: { isActive: false } });
+    alerts.offerNotifications(true);
+    // Outside a gesture nothing is written, so the next tap asks.
+    expect(stored.size).toBe(0);
+    vi.stubGlobal('navigator', {});
+    vi.stubGlobal('window', { focus, isSecureContext: false });
+    alerts.offerNotifications(true);
+    vi.stubGlobal('window', { focus, isSecureContext: true });
+    vi.stubGlobal('Notification', undefined);
+    alerts.offerNotifications(true);
+    expect(requestPermission).not.toHaveBeenCalled();
+    // Asked on this device before.
+    vi.stubGlobal('Notification', FakeNotification);
+    stored.set('focus:notifications-asked', '1');
+    alerts.offerNotifications(true);
+    expect(requestPermission).not.toHaveBeenCalled();
   });
 
   it('shows a silent notification only when granted, and focuses the window on click', () => {

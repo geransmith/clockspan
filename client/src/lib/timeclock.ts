@@ -40,11 +40,17 @@ export interface TimeclockResult {
   /** 'taken' once any non-lunch break starts after lunch out. */
   secondMealStatus: SecondMealStatus;
   /**
-   * The punch times typed so far, ahead of now included, don't alternate in/out chronologically:
-   * the first punch out of place and the punch it should come after, whose time can be empty
-   * (`orderSlip`). Null while they do.
+   * The punch times typed so far, ahead of now included, are out of order (`orderSlip`): the first
+   * punch out of place and the punch it should come after, whose time can be empty. An Out typed
+   * ahead right after a lunch or break whose In is still empty waits for the clock to reach it.
+   * Null while they are in order.
    */
   outOfOrder: { position: number; after: number } | null;
+  /**
+   * A past day still clocked in at its end, with its punches in order: nothing says when the work
+   * stopped, so `workedSeconds` runs to the end of the day and no hours total counts it.
+   */
+  unclosed: boolean;
 }
 
 const LUNCH_OUT_POSITION = 1;
@@ -102,6 +108,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy: null,
     secondMealStatus: 'none',
     outOfOrder: null,
+    unclosed: false,
   };
   if (clockIn == null) return empty;
 
@@ -111,8 +118,9 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
   const typed = punches
     .filter((p): p is Punch & { at: number } => p.at != null)
     .sort((a, b) => a.at - b.at || tieRank(a) - tieRank(b) || a.position - b.position);
-  // Order is checked over every time typed, so a slip in one still ahead shows as it is typed.
-  const outOfOrder = orderSlip(typed, byPos, finalPos);
+  // Order is checked over every time typed, so a slip in one still ahead shows as it is typed,
+  // except an Out planned after a lunch or break not ended yet (`orderSlip`).
+  const outOfOrder = orderSlip(typed, byPos, finalPos, upTo);
   const set = typed.filter((p) => p.at <= upTo);
 
   // Never let a future clock-in produce negative time.
@@ -210,6 +218,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy,
     secondMealStatus,
     outOfOrder,
+    unclosed: opts.frozen === true && clockedIn && !outOfOrder,
   };
 }
 
@@ -217,18 +226,28 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
  * Null while the set punches, sorted by time, alternate in, out, in, out; else the punch out of
  * place and the one it should come after. Nothing comes before the Clock in, and an In comes after
  * its own Out. Past those, two outs follow each other: the In that should close the first is
- * empty or later than the second, or the first is a Clock out that came early.
+ * empty or later than the second, or the first is a Clock out that came early. Two outs where the
+ * first isn't the Clock out and its own In is still empty wait while the second is ahead of `upTo`:
+ * someone at lunch or on a break with an appointment or the Clock out typed for later hasn't
+ * slipped yet, and is told once the clock reaches that Out with the In still empty.
  */
-function orderSlip(typed: (Punch & { at: number })[], byPos: Map<number, number | null>, finalPos: number | null): TimeclockResult['outOfOrder'] {
+function orderSlip(typed: (Punch & { at: number })[], byPos: Map<number, number | null>, finalPos: number | null, upTo: number): TimeclockResult['outOfOrder'] {
   const i = typed.findIndex((p, k) => p.kind !== kindForPosition(k));
   if (i < 0) return null;
   const first = typed[0]!;
   if (first.position !== 0) return { position: first.position, after: 0 };
   const early = typed.find((p) => p.kind === 'in' && p.position > 0 && (byPos.get(p.position - 1) ?? Infinity) > p.at);
   if (early) return { position: early.position, after: early.position - 1 };
-  // With every In after its Out, the slip is two outs in a row: i is at least 2.
-  const [out, next] = [typed[i - 1]!, typed[i]!];
-  return out.position === finalPos ? { position: out.position, after: next.position } : { position: next.position, after: out.position + 1 };
+  // With every In after its Out, a slip is two outs in a row, the first pair at i - 1 and i (i is
+  // at least 2). The first Out of a waiting pair has no In, so no two Ins meet past it either, and
+  // neighbours are all the walk needs to compare.
+  for (let k = i; k < typed.length; k++) {
+    const [out, next] = [typed[k - 1]!, typed[k]!];
+    if (out.kind !== 'out' || next.kind !== 'out') continue;
+    if (out.position === finalPos) return { position: out.position, after: next.position };
+    if (next.at <= upTo || byPos.get(out.position + 1) != null) return { position: next.position, after: out.position + 1 };
+  }
+  return null;
 }
 
 /**
@@ -252,7 +271,8 @@ export function targetFraction(tc: TimeclockResult): number {
 
 /**
  * A stored day's timeclock: on its own work-day length (daySettings), live today; a past day is
- * frozen at its end so an unclosed clock-in doesn't count forever.
+ * frozen at its end. One still clocked in there runs its worked time to the end of the day, and
+ * the totals leave it out through `unclosed`.
  */
 export function dayTimeclock(
   day: { date: string; punches: Punch[]; workMinutes: number | null },
@@ -375,12 +395,15 @@ export function lunchInPunchOrder(
  * The first row without a time, in the order the card shows them (clock in, pairs before
  * lunch, lunch out and in, pairs after it, clock out): the one the next "Now" is for. Null
  * once every row has a time. `lunchRows` false skips the lunch rows; the card passes
- * `lunchInPunchOrder`.
+ * `lunchInPunchOrder`. An extra pair whose Out is typed ahead of `now` (an appointment) is left
+ * out, both rows, and when that leaves the Clock out next, nothing is: a Now on the Clock out
+ * before the appointment would invite an early Clock out.
  */
-export function nextPunchPosition(punches: Punch[], lunchRows: boolean): number | null {
+export function nextPunchPosition(punches: Punch[], lunchRows: boolean, now: number): number | null {
   const byPos = new Map(punches.map((p) => [p.position, p]));
   const pairs = extraPairs(punches);
-  const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch).flatMap((p) => [p.out, p.in]);
+  const ahead = (p: ExtraPair) => p.out.at != null && p.out.at > now;
+  const pairRows = (beforeLunch: boolean) => pairs.filter((p) => p.beforeLunch === beforeLunch && !ahead(p)).flatMap((p) => [p.out, p.in]);
   const clockOut = clockOutPosition(punches);
   const order = [
     byPos.get(0),
@@ -389,7 +412,8 @@ export function nextPunchPosition(punches: Punch[], lunchRows: boolean): number 
     ...pairRows(false),
     clockOut == null ? undefined : byPos.get(clockOut),
   ];
-  return order.find((p) => p != null && p.at == null)?.position ?? null;
+  const next = order.find((p) => p != null && p.at == null)?.position ?? null;
+  return next === clockOut && pairs.some(ahead) ? null : next;
 }
 
 /** Ensure the fixed rows exist, positions are contiguous and the last row is the clock out. */
