@@ -260,7 +260,7 @@ describe('SettingsDialog', () => {
     ).toBeTruthy();
   });
 
-  it('shows the Break alarm with no warnings, an hourly repeat and a tooltip on its hint', async () => {
+  it('shows the Break alarm with no warnings, an hourly repeat and a tooltip on its hint, naming lunch only with the meal periods on', async () => {
     await renderDialog();
     await openTab('Alarms');
     const breakAlarm = screen.getByRole('group', { name: 'Break', hidden: true });
@@ -270,9 +270,13 @@ describe('SettingsDialog', () => {
     expect(hint('Break')).toBe(
       'Rings after 90 minutes without a break, counted from your last break or your last In punch. Waits while a timer or a break runs.',
     );
-    expect(document.getElementById(toggle('Break').getAttribute('aria-describedby')!)!.title).toBe(
-      'Stays quiet from 30 min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.',
-    );
+    const tooltip = () => document.getElementById(toggle('Break').getAttribute('aria-describedby')!)!.title;
+    expect(tooltip()).toBe('Stays quiet from 30 min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.');
+    await openTab('Timeclock');
+    fireEvent.click(toggle('Meal periods'));
+    await settle();
+    await openTab('Alarms');
+    expect(tooltip()).toBe('Stays quiet from 30 min before the clock-out deadline until the day ends or overtime is approved.');
   });
 
   it('saves one alarm field or one sound without touching the others', async () => {

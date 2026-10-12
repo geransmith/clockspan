@@ -47,7 +47,11 @@ export function AlarmsTab({ settings, set }: TabProps) {
         <AlarmEditor
           title="Break"
           hint={`Rings after ${NO_BREAK_MINUTES} minutes without a break, counted from your last break or your last In punch. Waits while a timer or a break runs.`}
-          hintTitle={`Stays quiet from ${BREAK_HOLD_MINUTES} min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.`}
+          hintTitle={
+            settings.mealRules
+              ? `Stays quiet from ${BREAK_HOLD_MINUTES} min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.`
+              : `Stays quiet from ${BREAK_HOLD_MINUTES} min before the clock-out deadline until the day ends or overtime is approved.`
+          }
           noWarnings
           alarm={settings.alarms.noBreak}
           onChange={(p) => setAlarm('noBreak', p)}
