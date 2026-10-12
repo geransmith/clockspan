@@ -42,6 +42,8 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
   // The meeting on now, and Until's time while Meeting's row is open.
   const inMeeting = isToday ? meetingAt(dayMeetings(date, meetings, settings.meetings), now) : null;
   const [until, setUntil] = useState<number | null>(null);
+  // A timer or a meeting that starts while it is open (here, on the board, another device) closes it.
+  if (until != null && (timer.running || inMeeting)) setUntil(null);
   const untilErrorId = useId();
   const [label, setLabel] = useState('');
   // The row picked from the label box's list, so a pick between two rows of one name starts on the one picked.
@@ -198,6 +200,7 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
                 passFocus();
                 setUntil(defaultUntil(now));
               }}
+              disabled={held}
               ref={takeFocus}
             >
               {MEETING.start}
@@ -206,18 +209,18 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
         </div>
       )}
       {isToday && until != null && (
-        <div className="timer-until" role="group" aria-label="Start a meeting">
+        <PassFocusOnLeave className="timer-until" onLeave={passFocus}>
           <span className="muted small">Until</span>
           <TimeField
             value={until}
             date={date}
             hour12={hour12}
-            anchorAt={now}
+            anchorAt={null}
             label="Until"
             errorId={untilError ? untilErrorId : undefined}
             onCommit={setUntil}
           />
-          <button className="btn btn-primary" onClick={() => startMeeting(until)} disabled={untilError != null} ref={takeFocus}>
+          <button className="btn btn-primary" onClick={() => startMeeting(until)} disabled={held || untilError != null} ref={takeFocus}>
             {MEETING.begin}
           </button>
           <button
@@ -234,7 +237,7 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
               {untilError}
             </p>
           )}
-        </div>
+        </PassFocusOnLeave>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
       {/* A new row's failed save is the "Change Not Saved" banner's to say; the list full or not loaded, and the start's own errors, show here. */}

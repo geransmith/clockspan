@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
+import { CHANGED_ELSEWHERE } from '../api';
 import { useDay } from '../hooks/useDay';
 import { useTimer } from '../hooks/useTimer';
 import { warnSaveFailed } from '../lib/alerts';
@@ -700,6 +701,46 @@ describe('FocusTimer', () => {
       press(screen.getByRole('button', { name: MEETING.end }));
       await settle();
       expect(api.putMeeting).toHaveBeenCalledExactlyOnceWith(TODAY, 'stand000', null);
+    });
+
+    it('holds Meeting and Start Meeting while a start is out, as it holds Break', async () => {
+      const answer = deferredAnswer<SessionResponse>();
+      vi.mocked(api.startSession).mockReturnValue(answer.promise);
+      await renderCard();
+      press(meetingButton());
+      fireEvent.click(start25());
+      expect((screen.getByRole('button', { name: MEETING.begin }) as HTMLButtonElement).disabled).toBe(true);
+      press(screen.getByRole('button', { name: 'Cancel' }));
+      expect((meetingButton() as HTMLButtonElement).disabled).toBe(true);
+      answer.resolve(started());
+      await settle();
+    });
+
+    it("closes Until when a timer starts, so it doesn't come back after the session", async () => {
+      vi.mocked(api.startSession).mockResolvedValue(answered(started()));
+      await renderCard();
+      press(meetingButton());
+      fireEvent.click(start25());
+      await settle();
+      expect(screen.getByRole('timer', { name: 'Time remaining' })).toBeTruthy();
+      vi.mocked(api.getRunning).mockResolvedValue(answered({ session: null }));
+      act(() => {
+        window.dispatchEvent(new Event(CHANGED_ELSEWHERE));
+      });
+      await settle();
+      expect(screen.queryByRole('group', { name: 'Until time' })).toBeNull();
+      expect(meetingButton()).toBeTruthy();
+    });
+
+    it('closes Until when a meeting begins while it is open, handing the focus to End Meeting', async () => {
+      held = { a: { title: 'Standup', startsAt: at(1), endsAt: at(16) } };
+      await renderCard([], [], null, { meetings: held });
+      press(meetingButton());
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: MEETING.begin }));
+      vi.setSystemTime(at(1));
+      await settle(1000);
+      expect(screen.queryByRole('group', { name: 'Until time' })).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: MEETING.end }));
     });
 
     it('offers no Meeting off today', async () => {
