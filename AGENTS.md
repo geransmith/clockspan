@@ -1321,9 +1321,9 @@ tests that reach it, and an unreachable branch is deleted, never hidden behind `
 ## Gotchas
 
 - `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). The dev machine has Docker
-  (OrbStack, arm64), so a change to the image (the Dockerfile, `docker/`,
-  `.github/actions/build-and-smoke`) is built and booted with `scripts/smoke-image.sh` before its
-  PR; `image-smoke` still runs both platforms on each PR.
+  (OrbStack, which runs amd64 images too), so a change to the image (the Dockerfile, `docker/`,
+  `.github/actions/build-and-smoke`) or a dependency is built and booted for both platforms with
+  `scripts/smoke-image.sh` before its PR; `image-smoke` still runs on each PR.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
 - `client/public/sw.js` caches nothing, on purpose (its comments say why), and is registered only
