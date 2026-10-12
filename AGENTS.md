@@ -898,6 +898,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   place under its tag, once per tab per time, from the day and never from the press. It rings once
   at that time and its repeats count from it. A deadline moved past the press re-arms the alarm;
   a snooze gone before its time (a failed save, Repeat turned off) takes the quiet banner down.
+- **Today's alarms wait through a meeting.** While a meeting of today's is on (`meetingAt` over
+  `dayMeetings`, in `useTodayAlarms`), `dueEvents` lets only a deadline's own ring sound
+  (`MEETING_RINGS`: lunch, the end of lunch, clock-out and the second meal), crossing the warnings
+  before it. Every other event, the break alarm and the retrospective included, stays uncrossed, so
+  the latest one missed rings once the meeting ends. A banner already up stays, and a meeting never
+  counts as rest (`lastBreakEnd` reads breaks only).
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another

@@ -34,6 +34,7 @@ const NO_DAY: AlarmDayState = {
   timerStarting: false,
   snoozedUntil: {},
   snooze: vi.fn(),
+  inMeeting: false,
 };
 const SNOOZE = { label: 'Snooze 15 min', run: expect.any(Function) as () => void };
 
@@ -412,6 +413,21 @@ describe('snooze', () => {
     const off = makeSettings({ alarms: { ...settings.alarms, lunchBy: { ...settings.alarms.lunchBy, overdueEveryMinutes: 0 } } });
     rerender(props(T0 + 3 * MINUTE_MS, snoozed, off));
     expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:lunchBy']]);
+  });
+
+  it('takes the quiet banner down when its time passes in a meeting, and the ring comes once the meeting ends', () => {
+    // Rung first, as a Snooze is pressed on a ring's banner.
+    const { rerender } = renderAlarms(props(T0));
+    const until = pressedAt(T0);
+    const snoozed = { snoozedUntil: { lunchBy: until } };
+    rerender(props(T0, snoozed));
+    vi.mocked(dismissByTag).mockClear();
+    vi.mocked(alert).mockClear();
+    rerender(props(until, { ...snoozed, inMeeting: true }));
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:lunchBy']]);
+    expect(raised('alarm:lunchBy')).toEqual([]);
+    rerender(props(until + 20 * MINUTE_MS, snoozed));
+    expect(raised('alarm:lunchBy')).toEqual([expect.objectContaining({ title: 'Lunch Is 3h 45m Overdue' })]);
   });
 });
 
