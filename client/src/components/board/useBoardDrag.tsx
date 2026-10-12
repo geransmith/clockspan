@@ -34,7 +34,7 @@ import { CategoryTag, type ItemDrag } from './BoardCard';
 import { boardCollision, boardKeyboardCoordinates } from './dnd';
 
 /** The dragged item's place in its list while the copy under the pointer moves. */
-const DRAGGED_OPACITY = 0.4;
+const DRAGGED_OPACITY = 'var(--opacity-dragged)';
 
 /**
  * A recurring priority drags from Later's Repeats alone, to In Progress or Done; dropped in Later

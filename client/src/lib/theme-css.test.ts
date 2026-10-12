@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CATEGORY_COLORS } from '../../../shared/api.js';
 import { BOARD_COLUMNS_QUERY, SPLIT_QUERY } from './layout';
@@ -40,6 +40,20 @@ function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi! + 0.05) / (lo! + 0.05);
 }
+
+/** The stylesheet below its token blocks, without comments. */
+const rules = css.slice(css.indexOf('/* ---------- base ---------- */')).replace(/\/\*[\s\S]*?\*\//g, '');
+/** Every declaration there but those in @keyframes, which are an animation's shape, named by it. */
+const declarations = [...rules.replace(/@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '').matchAll(/([-\w]+)\s*:\s*([^;{}]+);/g)].map(
+  ([, property, value]) => ({ property: property!, value: value!.trim() }),
+);
+/** The properties a look is made of, and a rule's own custom properties but a touch area's inset. */
+const STYLED =
+  /^(font(-size|-weight|-family)?|line-height|letter-spacing|(padding|margin|scroll-margin|transition|animation)(-[a-z-]+)?|(row-|column-)?gap|border(-[a-z-]+)?-radius|box-shadow|z-index|opacity|--(?!hit-inset$)[\w-]+)$/;
+/** A number left once the custom properties' names are out, but a lone 0 or 1 (calc(-1 * …) negates a step). */
+const hasRawNumber = (value: string) => /\d/.test(value.replace(/--[\w-]+/g, '').replace(/(?<![\w.])[01](?![\w.%])/g, ''));
+/** A colour written out: hex, a colour function, or white or black by name. Forced colors' system colours are keywords. */
+const COLOUR = /#[0-9a-f]{3,8}\b|\b(rgb|hsl|hwb|lab|lch|oklab|oklch)a?\(|(?<![\w-])(white|black)(?![\w-])/i;
 
 describe('styles.css', () => {
   // The dark palette is written twice: under the system's dark scheme and for a forced dark theme.
@@ -148,5 +162,29 @@ describe('styles.css', () => {
   // A toggle's on state is styled from its ARIA attribute, never a class kept beside it.
   it('styles no on state from a class', () => {
     expect(css).not.toMatch(/\.is-(on|active)\b/);
+  });
+
+  // The look changes in the token blocks alone: below them a size of type, a weight, a line, a gap,
+  // a corner, a shadow, a timing, a layer or an opacity is a step of a scale, or a token named for
+  // its reason. The guard stops a moved marker from passing on nothing.
+  it('takes every type, spacing, corner, shadow, motion, layer and opacity value from a token', () => {
+    expect(declarations.length).toBeGreaterThan(1000);
+    expect(declarations.filter((d) => STYLED.test(d.property) && hasRawNumber(d.value))).toEqual([]);
+  });
+
+  it('writes no colour below the token blocks', () => {
+    expect(rules.split('\n').filter((line) => COLOUR.test(line))).toEqual([]);
+  });
+
+  // A misspelt or guessed token (var(--space-5)) drops its declaration without an error, in the
+  // stylesheet or in a style set from the code. The burst's pieces get --delay, --dx, --dy and --rot
+  // from Burst.tsx.
+  it('defines every custom property it reads', () => {
+    const code = readdirSync(new URL('..', import.meta.url), { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.tsx?$/.test(file) && !file.includes('.test.'))
+      .map((file) => read(`../${file}`));
+    const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name));
+    const reads = new Set([css, ...code].flatMap((text) => [...text.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name!)));
+    expect([...reads].filter((name) => !defined.has(name)).sort()).toEqual(['--delay', '--dx', '--dy', '--rot']);
   });
 });

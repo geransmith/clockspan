@@ -1192,7 +1192,18 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   unless the `theme` setting forces one (`data-theme` on `<html>`, set by `lib/theme.ts`; the
   two dark token blocks must match, `index.html`'s theme-color metas repeat `--bg` for each
   scheme and the manifest's `background_color` and `theme_color` the light one:
-  `theme-css.test.ts` checks them all), built **phone-base** (the base rules are the phone;
+  `theme-css.test.ts` checks them all). Below the token blocks every type size, weight, line height,
+  letter spacing, padding, margin, gap, corner, shadow, transition and animation timing, z-index and
+  opacity is a `var()` of a token, and no colour is written out as hex, a colour function, white or
+  black (`theme-css.test.ts` fails on either, and on a `var()` of a token never defined; a named
+  colour such as `red` gets past it, so don't write one). Take a step of a scale (`--fs-*`,
+  `--space-*`, `--radius*`, `--fw-*`, `--lh-*`, `--dur-*`); a value with a reason to sit off one is
+  a token named for it with the reason beside it (`--fs-tile`, `--fs-tab`, `--field-lh`,
+  `--dur-tick`), never a test exception. A lone 0 or 1 is fine, and a negative step is
+  `calc(-1 * var(--space-N))`. These stay literal: `@media` lines (`var()` can't be read there),
+  sizes and positions, grid tracks, borders and outlines, `@keyframes` and a control's
+  `--hit-inset`. A style value set from TSX is a `var()` string too (the drag styles' opacity).
+  The stylesheet is built **phone-base** (the base rules are the phone;
   `@media (min-width: 640px)` and wider queries enhance; that is how the stylesheet is built, not
   who it is for). The sheet's two columns start at `SPLIT_QUERY` (`lib/layout.ts`), which
   `styles.css` writes out as its `@media` line (`theme-css.test.ts` checks it is there). Every view
@@ -1210,7 +1221,7 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   under a dialog's scroll lock (`theme-css.test.ts` checks the width is set once). Every width
   rule is a window query, so a card in a column gets the wide-window rules at about half the width:
   a rule that needs the room (the timeclock's four tiles in a row) is undone under `.sheet--split`.
-  Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: 44px`, and a compact
+  Tap targets are 44 px on a touch screen: `.btn` and `.input` set `min-height: var(--tap)` (44 px), and a compact
   control (chip, segment, running-bar button, banner close/action, log delete, a board column's +)
   keeps its drawn size and gets the rest from the `@media (pointer: coarse)` block at the end of
   `styles.css`, an empty `::after` reaching past its edge (a control that clips its overflow grows
@@ -1218,7 +1229,7 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   compact control joins that block and sets its `--hit-inset` there (`theme-css.test.ts` checks).
   A toggle's on state is styled from its ARIA attribute (`[aria-pressed='true']`,
   `[aria-selected='true']`), never a parallel `is-on` / `is-active` class (`theme-css.test.ts`
-  checks). Inputs are 16 px so iOS doesn't zoom. No external fonts or assets (the CSP would block
+  checks). Inputs are 16 px (`--fs-field`) so iOS doesn't zoom. No external fonts or assets (the CSP would block
   them anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and
   `--safe-right` (a phone held sideways puts the notch on a side). Words in a tone's colour use its
   `-ink` token (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode
