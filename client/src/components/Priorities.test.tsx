@@ -29,7 +29,7 @@ describe('Priorities', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     // The row gets its id and its time the first time it has text.
     expect(saved()[0]).toMatchObject({ position: 1, text: 'Write the report', done: false, addedAt: T0 });
-    expect(saved()[0]!.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(saved()[0]!.uid).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('saves at once when the row is left, and keeps a pasted line break out', async () => {

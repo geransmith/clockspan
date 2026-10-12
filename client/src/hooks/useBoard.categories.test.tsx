@@ -95,7 +95,7 @@ describe('categories', () => {
       act(() => {
         uid = result.current.pick!.create('  Knowledge   base ');
       });
-      expect(uid).toMatch(/^[0-9a-f]{12}$/);
+      expect(uid).toMatch(/^[0-9a-f]{32}$/);
       expect(result.current.pick?.categories).toEqual([TICKETS, makeCategory(uid!, 'Knowledge base', { color: 'teal' })]);
       await settle();
       expect(api.addCategory).toHaveBeenCalledExactlyOnceWith({ uid, name: 'Knowledge base', color: 'teal' });
