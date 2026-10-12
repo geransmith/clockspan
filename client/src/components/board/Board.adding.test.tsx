@@ -221,7 +221,7 @@ describe('adding from a column', () => {
       { date: WED, texts: ['Call the vendor', 'Email', ''] },
     ]);
     expect(lists[WED]![0]).toMatchObject({ text: 'Call the vendor', done: false, recurring: false, categoryUid: null });
-    expect(lists[WED]![0]!.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(lists[WED]![0]!.uid).toMatch(/^[0-9a-f]{32}$/);
     expect(api.addItem).not.toHaveBeenCalled();
     expect(titlesIn('In Progress')).toEqual(['Call the vendor']);
     expect(document.activeElement).toBe(document.body);

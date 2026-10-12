@@ -61,7 +61,7 @@ describe('PUT /api/days/:date/priorities', () => {
     expect(a).toEqual({ ...stored(1, 'Kept', 'abcdef123456'), done: true, addedAt: 100 });
     // A free row is never stored, so the next row keeps its place: positions can have gaps.
     expect(c.position).toBe(3);
-    expect(c.uid).toMatch(/^[a-f0-9]{12}$/);
+    expect(c.uid).toMatch(/^[a-f0-9]{32}$/);
     expect(typeof c.addedAt).toBe('number');
     expect((await app.api.get('/api/days/2026-09-01')).body.priorities).toEqual(r.body.priorities);
   });

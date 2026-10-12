@@ -167,7 +167,7 @@ describe('BoardTab', () => {
     expect(api.addCategory).toHaveBeenCalledTimes(1);
     const [made] = vi.mocked(api.addCategory).mock.calls[0]!;
     expect(made).toMatchObject({ name: 'Knowledge base', color: 'green' });
-    expect(made.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(made.uid).toMatch(/^[0-9a-f]{32}$/);
     expect(names()).toEqual(['Tickets', 'Admin', 'Knowledge base']);
     // The row stays for the next one, in the colour after.
     expect(newBox().value).toBe('');

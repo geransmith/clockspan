@@ -188,7 +188,7 @@ function parsePriorityRows(input: unknown, label: RowsLabel, now: number, unsaid
     let uid = typeof item.uid === 'string' ? item.uid.toLowerCase() : null;
     if (uid && !written) return `${name} needs a name.`;
     if (uid && seen.has(uid)) return `${name} repeats another row's uid.`;
-    if (!uid && written) uid = randomBytes(6).toString('hex');
+    if (!uid && written) uid = randomBytes(16).toString('hex');
     if (uid) seen.add(uid);
     // Stamped by the client when the row first got text; at most a day ahead, for a device clock running fast.
     let addedAt = item.addedAt == null ? null : parseInstant(item.addedAt, 0, now + DAY_MS);
