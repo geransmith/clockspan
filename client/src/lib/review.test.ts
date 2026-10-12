@@ -450,10 +450,11 @@ describe('reviewRange: Typical runs', () => {
 
   it('lists the two most used lengths, the most used first and a tie in the order met', () => {
     const of = (first: number, count: number, from: number) => Array.from({ length: count }, (_, i) => run(from + i, TUE, first, first + 60));
-    const day = makeDay(TUE, { sessions: [...of(600, 3, 1), ...of(1500, 4, 10), ...of(3000, 3, 20)] });
+    // The longer tied length is met first, so neither ascending keys nor ascending length could pass.
+    const day = makeDay(TUE, { sessions: [...of(3000, 3, 1), ...of(1500, 4, 10), ...of(600, 3, 20)] });
     expect(runs(day)).toEqual([
       { firstPlannedSeconds: 1500, ranSeconds: 1560 },
-      { firstPlannedSeconds: 600, ranSeconds: 660 },
+      { firstPlannedSeconds: 3000, ranSeconds: 3060 },
     ]);
   });
 });

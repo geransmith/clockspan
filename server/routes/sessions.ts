@@ -163,8 +163,9 @@ export function sessionsRouter(db: DB): Router {
   // time past the end as well (they were there for it). A session finished while paused ends
   // when the pause began (no work happened since), so the log excludes every pause. `expect` is
   // the plan and pause an automatic finish judged the row by: once another device has given it
-  // time or resumed it, it may not be due any more, so that finish is refused. It stores no real
-  // stop (`stopped_at`), since it fires a grace period past the end or whenever a page next opens.
+  // time or resumed it, it may not be due any more, so that finish is refused. Any finish with
+  // `expect`, the forgotten pause's included, stores no real stop (`stopped_at`): the due one fires
+  // a grace period past the end or whenever a page next opens, so its stop measures nothing.
   r.post('/:id/finish', (req, res) => {
     const s = owned(res);
     const { countOverrun, expect } = req.body as { countOverrun?: unknown; expect?: unknown };

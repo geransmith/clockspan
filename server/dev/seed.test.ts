@@ -101,7 +101,6 @@ function expectConsistent(m: SeedManifest, now: number) {
       expect(s.plannedSeconds).toBeGreaterThanOrEqual(PLANNED_SECONDS.min);
       expect(s.plannedSeconds).toBeLessThanOrEqual(PLANNED_SECONDS.max);
       expect(s.label.length).toBeLessThanOrEqual(LIMITS.sessionLabel);
-      // Stopped by hand at or past its logged end; a running or cancelled session has no stop.
       if (s.status === 'completed') expect(s.stoppedAt).toBeGreaterThanOrEqual(s.endedAt!);
       else expect(s.stoppedAt).toBeNull();
     }
@@ -299,7 +298,6 @@ describe('seedDatabase', () => {
         firstPlannedSeconds: 25 * 60,
         ranSeconds: 22 * 60,
       });
-      // A finish by hand past the plan, logged at the plan: its run reads longer than its log.
       const extra = (await app.api.get<Day>(`/api/days/${app.seeded!.days.find((d) => d.kind === 'extraPair')!.date}`)).body;
       expect(extra.sessions.some((s) => s.status === 'completed' && s.ranSeconds != null && s.ranSeconds > s.durationSeconds)).toBe(true);
       expect(today.sessions).toEqual(

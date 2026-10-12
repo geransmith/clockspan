@@ -263,7 +263,10 @@ export function reviewRange(
       doneRows.push(r.done);
     }
     for (const s of day.sessions) {
-      if (s.firstPlannedSeconds != null && s.ranSeconds != null) runs.set(s.firstPlannedSeconds, [...(runs.get(s.firstPlannedSeconds) ?? []), s.ranSeconds]);
+      if (s.firstPlannedSeconds == null || s.ranSeconds == null) continue;
+      let ran = runs.get(s.firstPlannedSeconds);
+      if (!ran) runs.set(s.firstPlannedSeconds, (ran = []));
+      ran.push(s.ranSeconds);
     }
     const routineRows = r.planned.filter((p) => p.priority.recurring);
     const oneOffs = r.planned.filter((p) => !p.priority.recurring);
