@@ -93,6 +93,7 @@ export function missedClockIn(
   const counts =
     settings.trackHours ||
     alarms.clockOut.enabled ||
+    alarms.noBreak.enabled ||
     (settings.mealRules && (alarms.lunchBy.enabled || alarms.lunchEnd.enabled || alarms.secondMeal.enabled)) ||
     (alarms.retro.enabled && cardShown(settings.layout, 'retro'));
   if (starts.length === 0 || day.punches.some((p) => p.at != null) || !cardShown(settings.layout, 'timeclock') || !counts) return null;

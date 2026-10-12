@@ -538,6 +538,9 @@ describe('missedClockIn', () => {
     expect(only({})).toBeNull();
     expect(only({ trackHours: true })).toBe(first);
     expect(only({ alarms: alarmsOn('clockOut') })).toBe(first);
+    // The break alarm with meal periods on or off.
+    expect(only({ alarms: alarmsOn('noBreak') })).toBe(first);
+    expect(only({ alarms: alarmsOn('noBreak'), mealRules: false })).toBe(first);
     // The meal alarms only with meal periods on, the retrospective's only with its card shown.
     for (const id of ['lunchBy', 'lunchEnd', 'secondMeal'] as const) {
       expect(only({ alarms: alarmsOn(id) })).toBe(first);
