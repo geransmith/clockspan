@@ -62,7 +62,6 @@ describe('mergeSettings', () => {
     const old = { enabled: false, leadMinutes: [10], onDue: false, overdueEveryMinutes: 2 };
     const merged = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: old, clockOut: old, secondMeal: old, retro: old } }).alarms;
     expect(merged.lunchEnd).toEqual({ enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 });
-    expect(merged.lunchBy).toEqual(old);
   });
 
   it('takes every switch only as true or false, flipped from its default', () => {

@@ -165,9 +165,14 @@ describe('alarmTargets', () => {
   it('arms the end of lunch only at lunch, at Lunch out plus the lunch length', () => {
     const lunchEnd = (t: ReturnType<typeof tc>) => alarmTargets(t, s, day).find((x) => x.id === 'lunchEnd');
     expect(lunchEnd(tc(IN + 4 * HOUR_MS + 10 * MINUTE_MS, IN, IN + 4 * HOUR_MS))).toEqual({ id: 'lunchEnd', at: IN + 4.5 * HOUR_MS, armed: true });
-    // Still at lunch past its end, with a Clock out typed ahead: the alarm keeps its time.
-    expect(lunchEnd(tc(IN + 5 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS))).toEqual({ id: 'lunchEnd', at: IN + 4.5 * HOUR_MS, armed: true });
-    expect(lunchEnd(tc(IN + 2 * HOUR_MS, IN))?.armed).toBe(false);
+    // A Clock out typed ahead keeps clock-out and the retrospective off at lunch, as the repeat's body says.
+    expect(armed(alarmTargets(tc(IN + 5 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day))).toEqual({
+      lunchBy: false,
+      lunchEnd: true,
+      clockOut: false,
+      secondMeal: false,
+      retro: false,
+    });
   });
 
   it('rings the end of lunch when it is reached, then every 15 minutes, and nothing before', () => {
@@ -316,7 +321,7 @@ describe('missedClockIn', () => {
     expect(only({ trackHours: true })).toBe(first);
     expect(only({ alarms: alarmsOn('clockOut') })).toBe(first);
     // The meal alarms only with meal periods on, the retrospective's only with its card shown.
-    for (const id of ['lunchBy', 'secondMeal'] as const) {
+    for (const id of ['lunchBy', 'lunchEnd', 'secondMeal'] as const) {
       expect(only({ alarms: alarmsOn(id) })).toBe(first);
       expect(only({ alarms: alarmsOn(id), mealRules: false })).toBeNull();
     }

@@ -103,7 +103,7 @@ export interface Settings {
    * the day's length shown as overtime. Off (exempt, salaried) it reads as time past the day.
    */
   overtimeApproval: boolean;
-  /** The lunch deadline and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
+  /** The lunch deadline, end of lunch and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
   mealRules: boolean;
   /**
    * The timeclock's Lunch out and Lunch in rows, and the Lunch taken sticker, while `mealRules`
@@ -121,7 +121,7 @@ export interface Settings {
   stickers: boolean;
   /** Saturday and Sunday columns on the History calendar. Off drops them and their stickers from the counts. */
   showWeekends: boolean;
-  /** Today's clock in, lunch deadline and clock out time in a row above the board's columns. */
+  /** Today's clock in, lunch deadline (the end of lunch while at lunch) and clock out time in a row above the board's columns. */
   clockBar: boolean;
   /** Recurring rows the morning offer ticks; more can be ticked. */
   recurringPerDay: number;

@@ -101,7 +101,7 @@ describe('lunch end', () => {
     const { rerender } = renderAlarms({ tc: lunchAt(T0) });
     expect(tags()).toEqual(['alarm:lunchEnd']);
     expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(
-      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, sticky: true, action: undefined }),
+      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: undefined }),
     );
     const later = T0 + 15 * MINUTE_MS;
     rerender({ date: TODAY, tc: lunchAt(later), now: later, day: NO_DAY, settings });

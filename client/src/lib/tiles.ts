@@ -5,7 +5,7 @@ import type { TimeclockResult } from './timeclock';
 
 /** One of the timeclock card's tiles: the number, the line under it, its colour class, and at lunch a label of its own. */
 export interface TileView {
-  /** Replaces the tile's usual label (Back By); set only then, since a key written as `undefined` would blank it. */
+  /** Set only at lunch; a key written as `undefined` would blank the tile's label. */
   label?: string;
   value: string;
   sub: string;

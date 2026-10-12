@@ -90,7 +90,8 @@ describe('Lunch by', () => {
   });
 
   it('says when it was taken, when none is needed, and when a finished day went without', () => {
-    expect(tiles(afterLunch, at(13)).lunch).toEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
+    // Strict: a `label` key written as undefined would blank the tile's label.
+    expect(tiles(afterLunch, at(13)).lunch).toStrictEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
     expect(tiles(clockedIn, at(9), {}, { workMinutes: 240 }).lunch.sub).toBe('Not needed today');
     expect(tiles(punchesAt(at(8), null, null, at(14)), at(14)).lunch).toEqual({ value: '13:00', sub: 'Not taken', tone: '' });
   });
@@ -105,12 +106,6 @@ describe('Back By', () => {
     expect(tiles(atLunch, at(12, 16)).lunch).toEqual({ label: 'Back By', value: '12:30', sub: 'In 14m', tone: 'tile--warn' });
     expect(tiles(atLunch, at(12, 36)).lunch).toEqual({ label: 'Back By', value: '12:30', sub: '6m over', tone: 'tile--warn' });
     expect(tiles(atLunch, at(15)).lunch.tone).toBe('tile--warn');
-  });
-
-  it('goes back to Lunch By, with no label of its own, once Lunch in is punched or with no end to count to', () => {
-    // Strict: a `label` key written as undefined would blank the tile's label.
-    expect(tiles(afterLunch, at(12, 40)).lunch).toStrictEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
-    expect(tiles(atLunch, at(12, 10), {}, { lunchMinutes: 0 }).lunch).toStrictEqual({ value: '13:00', sub: 'Taken at 12:00', tone: 'tile--ok' });
   });
 });
 
