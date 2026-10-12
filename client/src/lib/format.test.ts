@@ -9,6 +9,7 @@ import {
   formatDateSpan,
   formatDuration,
   formatDurationCeil,
+  formatDurationWords,
   formatHours,
   formatMinutes,
   formatMonth,
@@ -72,6 +73,17 @@ describe('durations', () => {
     expect(formatDuration(45 * 60)).toBe('45m');
     expect(formatDuration(3600 + 12 * 60)).toBe('1h 12m');
     expect(formatDuration(-90)).toBe('1m');
+  });
+
+  it("writes formatDuration's figure in words", () => {
+    expect(formatDurationWords(60)).toBe('1 minute');
+    expect(formatDurationWords(25 * 60)).toBe('25 minutes');
+    expect(formatDurationWords(61 * 60)).toBe('1 hour 1 minute');
+    expect(formatDurationWords(100 * 60)).toBe('1 hour 40 minutes');
+    expect(formatDurationWords(2 * 3600)).toBe('2 hours');
+    // Rounded as formatDuration rounds, so the words never read a minute off the figure.
+    expect(formatDuration(5999.5)).toBe('1h 40m');
+    expect(formatDurationWords(5999.5)).toBe('1 hour 40 minutes');
   });
 
   it('writes a length in minutes the way the alarm banners do, an hour or more as the tiles do', () => {

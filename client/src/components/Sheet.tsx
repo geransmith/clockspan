@@ -185,6 +185,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             sessions={day.sessions}
             now={now}
             pick={pick}
+            isToday={isToday}
             onChange={(p, base) => store.setPriorities(date, p, base)}
             onDeleteTask={(uid) => boardStore.deleteItem(uid)}
             // The note's own save, on the list as the store shows it. The note is the task's, on every day,

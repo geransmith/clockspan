@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { emptyRow } from '../lib/priorities';
 import type { CategoryPick } from '../lib/board';
-import { ADMIN, makePick, makePriority, NEW_CATEGORY, settle, TICKETS } from '../test/hooks';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { ADMIN, completedSession, makePick, makePriority, makeSession, NEW_CATEGORY, QUEUE, settle, T0, TICKETS } from '../test/hooks';
 import type { Priority } from '../types';
-import { renderCard, renderOnStore, textbox } from './Priorities.testkit';
+import { FILED_QUEUE, renderCard, renderOnStore, routineRow, textbox } from './Priorities.testkit';
 
 vi.mock('../api');
 vi.mock('../lib/alerts');
@@ -142,5 +143,59 @@ describe("Priorities: a row's category", () => {
     expect(chip(1)).toBeNull();
     fireEvent.blur(textbox(1));
     expect(chip(1)!.getAttribute('aria-label')).toBe('Category for priority 1: Tickets');
+  });
+});
+
+describe('Priorities: the time logged on a row', () => {
+  const REPORT = makePriority(1, 'Report');
+  /** Two finished sessions on `uid`, 100 minutes in all. */
+  const finished = (uid: string | null) => [
+    completedSession(1, T0, 60 * 60, { priorityUid: uid }),
+    completedSession(2, T0 + 2 * 60 * MINUTE_MS, 40 * 60, { priorityUid: uid }),
+  ];
+  const logged = () => document.querySelector('.priority-logged');
+
+  it("shows the day's finished time first in the row's end, named for today", async () => {
+    await renderCard([REPORT, makePriority(2, 'Email')], finished(REPORT.uid), makePick());
+    const label = screen.getByRole('img', { name: '1 hour 40 minutes logged today' });
+    expect(label.textContent).toBe('1h 40m');
+    expect(document.querySelector('.priority-end')!.firstElementChild).toBe(label);
+    expect(document.querySelectorAll('.priority-logged')).toHaveLength(1);
+  });
+
+  it("puts it before a routine's repeat mark", async () => {
+    await renderCard([routineRow(1, FILED_QUEUE)], finished(QUEUE.uid), makePick([TICKETS]));
+    const end = document.querySelector('.priority-end')!;
+    expect([...end.children].map((el) => el.getAttribute('aria-label'))).toEqual([
+      '1 hour 40 minutes logged today',
+      'Repeats',
+      'Add a note to priority 1',
+      null,
+    ]);
+  });
+
+  it('names it on this day on any other date', async () => {
+    await renderCard([REPORT], finished(REPORT.uid), makePick(), null, false);
+    expect(screen.getByRole('img', { name: '1 hour 40 minutes logged on this day' }).textContent).toBe('1h 40m');
+  });
+
+  it('shows nothing for a running timer, under a minute, or for time on other days', async () => {
+    const { unmount } = await renderCard([REPORT], [makeSession({ startedAt: T0 - 30 * MINUTE_MS, priorityUid: REPORT.uid })], makePick());
+    expect(logged()).toBeNull();
+    unmount();
+    const short = await renderCard([REPORT], [completedSession(1, T0, 45, { priorityUid: REPORT.uid })], makePick());
+    expect(logged()).toBeNull();
+    short.unmount();
+    await renderCard([makePriority(1, 'Report', { listed: 2, logged: 80 * 60 })], [], makePick());
+    expect(logged()).toBeNull();
+  });
+
+  it("shows nothing before the board's first read, nor on a row with no task beside time on no task", async () => {
+    const { unmount } = await renderCard([REPORT], finished(REPORT.uid), null);
+    expect(logged()).toBeNull();
+    unmount();
+    await renderCard([makePriority(1, 'Report', { uid: null })], finished(null), makePick());
+    expect(screen.getByRole('button', { name: /^Category for priority 1:/ })).toBeTruthy();
+    expect(logged()).toBeNull();
   });
 });

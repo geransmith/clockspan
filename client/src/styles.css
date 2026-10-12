@@ -1364,8 +1364,8 @@ button {
 }
 /* A written row's note button, and its category chip after it, sit on a line of their own under
    the field, so the field keeps the row's width beside the ×, and they are nearer their own field
-   than the next row's. An empty row has neither and keeps one line. A routine's row has its
-   repeat mark first on that line, 6 px before the button. */
+   than the next row's. An empty row has neither and keeps one line. The time logged on the row
+   comes first on that line, then a routine's repeat mark, each 6 px before what follows. */
 .priority-end {
   grid-column: 3;
   grid-row: 2;
@@ -1374,6 +1374,11 @@ button {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+.priority-logged {
+  flex: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 /* Line 1 of the last column, beside the field. From 640 px a free row has no button or chip,
    which would leave its × in their column. */
@@ -1388,9 +1393,9 @@ button {
    and 6 px: 10rem holds the widest chip, a name stopped at 9em of the chip's 0.82rem, plus 38 px
    of dot, gap, padding and border, is 156 px at a 16 px root font, with more to spare at a larger
    one.
-   A routine's repeat mark shares the column too, first: the cell takes the column's whole width
-   (not its content's, which would push past it), so the chip shrinks and a long name ends in its
-   ellipsis sooner. */
+   The logged time and a routine's repeat mark share the column too, first: the cell takes the
+   column's whole width (not its content's, which would push past it), so the chip shrinks and a
+   long name ends in its ellipsis sooner. */
 @media (min-width: 640px) {
   .priority-row {
     grid-template-columns: 24px 22px 1fr 28px minmax(44px, auto);
@@ -3204,8 +3209,8 @@ kbd {
     --hit-inset: -5px -4px -13px;
   }
   /* On that line it reaches up and down as the chip does, half the 6 px to the chip after it, and
-     13 px back, where nothing on the line takes taps (the gap before the field's column, or the
-     repeat mark): 44 × 44 px. */
+     13 px back, where nothing on the line takes taps (the gap before the field's column, the
+     logged time or the repeat mark): 44 × 44 px. */
   .priority-end .note-toggle {
     --hit-inset: -5px -4px -13px -14px;
   }
@@ -3252,7 +3257,8 @@ kbd {
   .priority-end .category-chip {
     --hit-inset: -9px -4px;
   }
-  /* Beside the field, half the 10 px gap to it and half the 6 px to the chip: 36 × 44 px. */
+  /* Beside the field, half the 10 px gap to it and half the 6 px to the chip: 36 × 44 px. It reaches
+     back the same way after the logged time or the repeat mark, neither of which takes taps. */
   .priority-end .note-toggle {
     --hit-inset: -9px -4px -9px -6px;
   }
