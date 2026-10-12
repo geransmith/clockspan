@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { alert, dismissByTag } from '../lib/alerts';
 import { formatTime, resolveHour12 } from '../lib/format';
 import { computeTimeclock, type TimeclockResult } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { makeSettings, punchesAt, T0, TODAY } from '../test/hooks';
+import { makeSettings, punchesAt, setVisibility, T0, TODAY } from '../test/hooks';
 import type { Settings } from '../types';
 import { useAlarms, type AlarmDayState } from './useAlarms';
 
@@ -104,6 +104,24 @@ describe('firing', () => {
   });
 });
 
+describe('lunch end', () => {
+  it('rings when lunch is over and replaces that banner with each repeat, so they never stack', () => {
+    // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ends now.
+    const lunchAt = (now: number) => tcAt(now, T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS);
+    const { rerender } = renderAlarms({ tc: lunchAt(T0) });
+    expect(tags()).toEqual(['alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: undefined }),
+    );
+    const later = T0 + 15 * MINUTE_MS;
+    rerender({ date: TODAY, tc: lunchAt(later), now: later, day: NO_DAY, settings });
+    expect(tags()).toEqual(['alarm:lunchEnd', 'alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Ended 15 min Ago', tone: 'warn', chime: settings.sounds.overdue }),
+    );
+  });
+});
+
 describe('clock-out and retro', () => {
   it('offers the banner buttons it was given', () => {
     const approveOvertime = vi.fn();
@@ -157,6 +175,7 @@ describe('clock-out and retro', () => {
     expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
       'alarm:clockOut',
       'alarm:lunchBy',
+      'alarm:lunchEnd',
       'alarm:noBreak',
       'alarm:retro',
       'alarm:secondMeal',
@@ -171,6 +190,7 @@ describe('clock-out and retro', () => {
     expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
       'alarm:clockOut',
       'alarm:lunchBy',
+      'alarm:lunchEnd',
       'alarm:noBreak',
       'alarm:retro',
       'alarm:secondMeal',
@@ -195,12 +215,13 @@ describe('break alarm', () => {
   const props = (day: Partial<AlarmDayState> = {}, tc = due): Props => ({ date: TODAY, tc, now: T0, day: { ...NO_DAY, ...day }, settings: on });
   const banner = () => vi.mocked(alert).mock.calls.find(([a]) => a.tag === 'alarm:noBreak')![0];
 
-  it('chimes the warning sound when due and on a repeat', () => {
-    renderAlarms(props());
+  it('chimes the warning sound when due and on the hourly repeat', () => {
+    const { rerender } = renderAlarms(props());
     expect(banner()).toMatchObject({ title: '1h 35m Without a Break', chime: on.sounds.lead, sticky: true });
     vi.mocked(alert).mockClear();
-    // An hour on, with the due event fired.
-    renderAlarms(props({}, tcAt(T0, T0 - 155 * MINUTE_MS)));
+    // An hour on, with the same clock-in: the 60-min repeat.
+    const later = T0 + 60 * MINUTE_MS;
+    rerender({ ...props({}, tcAt(later, T0 - 95 * MINUTE_MS)), now: later });
     expect(banner()).toMatchObject({ title: '2h 35m Without a Break', chime: on.sounds.lead });
   });
 
@@ -232,6 +253,8 @@ describe('missed clock-in', () => {
   const notClockedIn = tcAt(T0);
   const props = (patch: Partial<Props> = {}): Props => ({ date: TODAY, tc: notClockedIn, now: T0, day: missed(), settings, ...patch });
   const takenDown = () => vi.mocked(dismissByTag).mock.calls.filter(([tag]) => tag === 'clock-in').length;
+
+  afterEach(() => setVisibility('visible'));
 
   it('raises one quiet banner whose button clocks in at the minute it names', () => {
     const clockInAt = vi.fn();
@@ -270,6 +293,23 @@ describe('missed clock-in', () => {
     a.rerender(props());
     b.rerender(props());
     expect(tags()).toEqual(['clock-in']);
+  });
+
+  it('waits for a tab that is shown, records nothing while hidden, and still comes down there', () => {
+    setVisibility('hidden');
+    const { rerender } = renderAlarms(props());
+    expect(alert).not.toHaveBeenCalled();
+    expect(localStorage.getItem('focus:alarms')).toBeNull();
+
+    setVisibility('visible');
+    rerender(props({ now: T0 + 1000 }));
+    expect(tags()).toEqual(['clock-in']);
+    expect(localStorage.getItem('focus:alarms')).toBe(`${TODAY} clockIn:missing`);
+
+    setVisibility('hidden');
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ day: missed({ missedClockIn: null }) }));
+    expect(takenDown()).toBe(1);
   });
 
   it('waits while the day is not judged', () => {

@@ -6,13 +6,14 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out; folded to an Open
-button until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out,
-the second meal period and 90 minutes without a break, and a Board page for tasks that aren't for
-today (its In Progress column is today's Top Priorities; tasks carry categories, made from a chip
-or in Settings → Board, and any card can be set to repeat on weekdays from its dialog, which makes
-it a recurring priority: listed under Later's Repeats and offered on Top Priorities on those days).
-Each task (a priority, a board card, a recurring priority) is stored once, with one name, one
-category and one note; a day's list names the tasks on it.
+button until the day is clocked out), a week / month / quarter review, alarms for the lunch
+deadline, the end of lunch, clock-out, the second meal period and 90 minutes without a break, and
+a Board page for tasks that aren't for today (its In Progress column is today's Top Priorities;
+tasks carry categories, made from a chip or in Settings → Board, and any card can be set to repeat
+on weekdays from its dialog, which makes it a recurring priority: listed under Later's Repeats and
+offered on Top Priorities on those days). Each task (a priority, a board card, a recurring
+priority) is stored once, with one name, one category and one note; a day's list names the tasks
+on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -89,6 +90,7 @@ client/                 Vite root → dist/client
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
+                        and smoke-local.sh, which runs it on both platforms (`npm run smoke`)
 docs/                   browser-passes.md; screenshots/, the PNGs the README and the Unraid template
                         embed, dark theme only (sheet-desktop.png is the template's alone)
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
@@ -118,6 +120,8 @@ npm run seed           # fill data/focus.db with sample days; see "Dev data is d
 npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
                        # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
 npm run icons          # render the PNG icons from client/public/icons/icon.svg (same Chromium)
+npm run smoke          # build and boot the image for amd64 and arm64, as image-smoke does (needs
+                       # Docker; without it, says so and passes)
 npm run build          # dist/client + dist/server + dist/shared
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
@@ -419,7 +423,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   a session start takes the break banners down in its tap (`dismissByTag('break')`, in
   `TimerLengths`), whose Start Break those buttons don't cover, and the break alarm's banner with
   them (`ALARM_TAG + 'noBreak'`), whose Start Break goes on the day store's queue too and does
-  nothing while `useTimer().starting`.
+  nothing while `useTimer().starting`. The tap also takes the timer's ending banners down
+  (`dismissByTag('timer-complete')`), so the stack clears from the tap rather than only once the
+  start answers.
 - **Saves reach the server in the order they were made**, each store's on its own queue (`serial()`
   in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and `setPriorities`
   send a whole list, so one PUT per list and day is in flight and only the newest waiting list
@@ -840,7 +846,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   never re-fires. Today's fired keys live in `localStorage` under `focus:alarms`, one set for one
   date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none. The
   missed clock-in banner's key, `clockIn:missing`, sits in the same set with no minute, so that
-  banner shows once a day per device.
+  banner shows once a day per device, in a tab that is shown: a hidden tab neither raises it nor
+  writes the key.
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another
@@ -1325,8 +1332,10 @@ tests that reach it, and an unreachable branch is deleted, never hidden behind `
 
 ## Gotchas
 
-- `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). There is no Docker on the
-  dev machine, so `image-smoke` (`scripts/smoke-image.sh`) on each PR is the image's first run.
+- `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). Docker is recommended for
+  development, not required: with it, `npm run smoke` (in CONTRIBUTING.md's "Before opening"
+  list) builds and boots the image before every PR; without it the script passes with a note, and
+  `image-smoke` on the PR is the image's first run.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
 - `client/public/sw.js` caches nothing, on purpose (its comments say why), and is registered only

@@ -3,8 +3,10 @@ import { CHECK_PUNCHES, NO_CLOCK_OUT } from './copy';
 import { counted, formatDuration, formatDurationCeil } from './format';
 import type { TimeclockResult } from './timeclock';
 
-/** One of the timeclock card's tiles: the number, the line under it, and its colour class. */
+/** One of the timeclock card's tiles: the number, the line under it, its colour class, and at lunch a label of its own. */
 export interface TileView {
+  /** Set only at lunch; a key written as `undefined` would blank the tile's label. */
+  label?: string;
   value: string;
   sub: string;
   /** '' or a `tile--*` modifier. */
@@ -15,7 +17,7 @@ export interface TileOptions {
   /** The day's clock (`clampToDay`): live today, the end of an earlier day. */
   now: number;
   isToday: boolean;
-  alarms: Pick<Settings['alarms'], 'lunchBy' | 'clockOut'>;
+  alarms: Pick<Settings['alarms'], 'lunchBy' | 'lunchEnd' | 'clockOut'>;
   /** Settings → Timeclock → Overtime: time past the day is overtime, and can be approved. */
   overtimeApproval: boolean;
   /** This day's "Overtime approved" switch as it counts (`overtimeOn`): set, and the Overtime setting on. */
@@ -28,10 +30,16 @@ function warnFromSeconds(alarm: AlarmSettings): number {
   return alarm.enabled && alarm.leadMinutes.length ? Math.max(...alarm.leadMinutes) * 60 : 15 * 60;
 }
 
-/** The Lunch by, Worked and Clock Out At tiles for a day's timeclock. */
+/** The Lunch by, Worked and Clock Out At tiles for a day's timeclock. At lunch the lunch tile reads Back By, with its own label, counting to the end of lunch. */
 export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: TileView; worked: TileView; clockOut: TileView } {
   const lunch: TileView = { value: '—', sub: 'Clock in to see your deadline', tone: '' };
-  if (tc.lunchBy != null) {
+  if (tc.lunchEndsAt != null) {
+    const secs = (tc.lunchEndsAt - o.now) / 1000;
+    lunch.label = 'Back By';
+    lunch.value = o.formatTime(tc.lunchEndsAt);
+    lunch.tone = secs <= warnFromSeconds(o.alarms.lunchEnd) ? 'tile--warn' : '';
+    lunch.sub = secs > 0 ? `In ${formatDurationCeil(secs)}` : `${formatDurationCeil(secs)} over`;
+  } else if (tc.lunchBy != null) {
     const secs = (tc.lunchBy - o.now) / 1000;
     lunch.value = o.formatTime(tc.lunchBy);
     if (tc.lunchStatus === 'taken') {
@@ -118,7 +126,8 @@ export type ClockBarItem = TileView & { id: 'clockIn' | 'lunch' | 'clockOut' };
 /**
  * The board's clock bar: Clock in, Lunch by and Clock Out At, whose line is the time left, in the
  * tiles' words. Lunch by shows with the meal periods on, once clocked in, while a lunch is planned
- * or taken; a lunch punched with them off still moves Clock Out At, as on the card.
+ * or taken, and at lunch reads Back By with its own label, as the tile does; a lunch punched with
+ * them off still moves Clock Out At, as on the card.
  */
 export function clockBarItems(tc: TimeclockResult, o: TileOptions & { mealRules: boolean }): ClockBarItem[] {
   const { lunch, clockOut } = timeclockTiles(tc, o);

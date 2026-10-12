@@ -19,11 +19,16 @@ export function AlarmsTab({ settings, set }: TabProps) {
         title="Alarms"
         hint={
           settings.mealRules
-            ? `Alerts as lunch, clock-out and the second meal period approach, a nudge to look back before the day ends, and one after ${NO_BREAK_MINUTES} minutes without a break.`
+            ? `Alerts as lunch, clock-out and the second meal period approach, when lunch is over, a nudge to look back before the day ends, and one after ${NO_BREAK_MINUTES} minutes without a break.`
             : `Alerts as clock-out approaches, a nudge to look back before the day ends, and one after ${NO_BREAK_MINUTES} minutes without a break.`
         }
       >
-        {settings.mealRules && <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />}
+        {settings.mealRules && (
+          <>
+            <AlarmEditor title="Lunch deadline" alarm={settings.alarms.lunchBy} onChange={(p) => setAlarm('lunchBy', p)} />
+            <AlarmEditor title="Lunch end" noWarnings alarm={settings.alarms.lunchEnd} onChange={(p) => setAlarm('lunchEnd', p)} />
+          </>
+        )}
         <AlarmEditor title="Clock-out" alarm={settings.alarms.clockOut} onChange={(p) => setAlarm('clockOut', p)} />
         {settings.mealRules && (
           <AlarmEditor
@@ -71,9 +76,7 @@ function AlarmEditor({
 }: {
   title: string;
   hint?: string;
-  /** The hint's tooltip. */
   hintTitle?: string;
-  /** No Warn before row. */
   noWarnings?: boolean;
   alarm: AlarmSettings;
   onChange: (p: Partial<AlarmSettings>) => void;
@@ -82,7 +85,8 @@ function AlarmEditor({
     const has = alarm.leadMinutes.includes(m);
     onChange({ leadMinutes: (has ? alarm.leadMinutes.filter((x) => x !== m) : [...alarm.leadMinutes, m]).sort((a, b) => b - a) });
   };
-  // Every alarm has the same fields, and the chips unless it has no warnings; the group gives each set the alarm's name.
+  // Every alarm has the same chips and fields, less the Warn before row for one with no warnings;
+  // the group gives each set the alarm's name.
   return (
     <div className="alarm-editor" role="group" aria-label={title}>
       <Toggle label={title} hint={hint} hintTitle={hintTitle} checked={alarm.enabled} onChange={(v) => onChange({ enabled: v })} />

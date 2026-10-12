@@ -51,21 +51,18 @@ describe('mergeSettings', () => {
     expect(mergeSettings(stored, { sound: false }).layout).toBe(merged);
   });
 
-  it('gives alarms stored before the break alarm existed the break alarm at its default, on', () => {
-    const { noBreak: _, ...stored } = DEFAULT_SETTINGS.alarms;
-    expect(mergeSettings(DEFAULT_SETTINGS, { alarms: stored }).alarms.noBreak).toEqual({
-      enabled: true,
-      leadMinutes: [],
-      onDue: true,
-      overdueEveryMinutes: 60,
-    });
-  });
-
   it('keeps retention within bounds, field by field', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 90 } }).retention).toEqual({ enabled: true, days: 90 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: 'yes', days: 7 } }).retention).toEqual(DEFAULT_SETTINGS.retention);
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 4000 } }).retention).toEqual({ enabled: true, days: 365 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: 'forever' }).retention).toEqual(DEFAULT_SETTINGS.retention);
+  });
+
+  it('gives a row saved before the lunch end and break alarms existed those alarms on, with no warnings, at their repeats', () => {
+    const old = { enabled: false, leadMinutes: [10], onDue: false, overdueEveryMinutes: 2 };
+    const merged = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: old, clockOut: old, secondMeal: old, retro: old } }).alarms;
+    expect(merged.lunchEnd).toEqual({ enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 });
+    expect(merged.noBreak).toEqual({ enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 60 });
   });
 
   it('takes every switch only as true or false, flipped from its default', () => {

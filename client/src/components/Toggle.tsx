@@ -11,7 +11,6 @@ export function Toggle({
 }: {
   label: string;
   hint?: string;
-  /** A tooltip on the hint. */
   hintTitle?: string;
   checked: boolean;
   onChange: (v: boolean) => void;

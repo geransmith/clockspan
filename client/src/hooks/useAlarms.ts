@@ -66,8 +66,10 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       clearBanners();
       // Up once a day, and down with nothing left to offer, a Clock in (below) or a new day. A later
       // change to the first start neither raises it again nor moves the minute its button writes.
+      // Only a shown tab raises and records it: with no chime, a banner in a hidden tab is a
+      // banner missed.
       if (missedClockIn == null) dismissByTag(CLOCK_IN_TAG);
-      else if (!fired.current.set.has(CLOCK_IN_KEY)) {
+      else if (document.visibilityState === 'visible' && !fired.current.set.has(CLOCK_IN_KEY)) {
         fired.current.set.add(CLOCK_IN_KEY);
         addToDaySet(USER_KEYS.alarms, dateKey, fired.current.set);
         const time = formatTime(missedClockIn, resolveHour12(settings.timeFormat));
