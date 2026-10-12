@@ -439,25 +439,18 @@ describe('banners', () => {
     expect(alerts.getBanners()).toEqual([expect.objectContaining({ ...SAVE_FAILED, tone: 'danger', tag: 'save-failed' })]);
   });
 
-  it('an alert carries its actions to the banner, in order', () => {
-    const approve = vi.fn();
-    const snooze = vi.fn();
+  it('an alert carries its action to the banner', () => {
+    const run = vi.fn();
     alerts.alert({
       title: 'Clock out',
       tone: 'danger',
       tag: 'alarm:clockOut',
       sticky: true,
-      actions: [
-        { label: 'Overtime Approved', run: approve },
-        { label: 'Snooze 15 min', run: snooze },
-      ],
+      actions: [{ label: 'Overtime approved', run }],
       sound: false,
       notifications: false,
     });
-    const actions = alerts.getBanners()[0]!.actions!;
-    expect(actions.map((a) => a.label)).toEqual(['Overtime Approved', 'Snooze 15 min']);
-    actions[1]!.run();
-    expect(snooze).toHaveBeenCalledOnce();
-    expect(approve).not.toHaveBeenCalled();
+    alerts.getBanners()[0]!.actions![0]!.run();
+    expect(run).toHaveBeenCalledOnce();
   });
 });

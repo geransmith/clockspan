@@ -39,14 +39,13 @@ what `npm run seed` writes.
   needed today" and never rings, and longer than the second-meal threshold, or that alarm
   waits for the day to run over or for overtime approval. At the mobile preset each target's
   banner shows at once, the clock-out banner with "Overtime Approved" and "Snooze 15 min" (one row
-  at 1280, wrapped at 375, never clipped). Snooze 15 min on lunch's due banner at +3 swaps it for a
-  quiet info banner, with no chime, reading "Take lunch now. It rings again at …"; the second meal
-  still rings at +6 and repeats. Snooze on clock-out at +10 turns it quiet with its own line and
-  time, and lunch's keeps its own. A reload during the snooze shows both again, with no chime, and
-  in a second window (as in Live updates) a Snooze in one turns the other's banner quiet within a
-  second. Lunch rings once when its snooze ends ("Lunch Is 15 min Overdue"), then 5 min after
-  that. Time's Up with "Add 5 min" (the Timer pass) sits as before, 8 px narrower. Lunch length 0
-  keeps the lunch end alarm off; for it, run
+  at 1280, wrapped at 375, never clipped). Snooze 15 min on lunch's due banner at +3, within its
+  first minute, swaps it for a quiet info banner, with no chime, reading "Take lunch now. It rings
+  again at …"; the second meal still rings at +6 and repeats. Snooze on clock-out at +10 turns it
+  quiet with its own line and time, and lunch's keeps its own. A reload during the snooze shows
+  both again, with no chime, and in a second window (as in Live updates) a Snooze in one turns the
+  other's banner quiet within a second. Lunch rings once when its snooze ends ("Lunch Is 15 min
+  Overdue"), then 5 min after that. Lunch length 0 keeps the lunch end alarm off; for it, run
   `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchMinutes":2,"alarms":{"lunchEnd":{"overdueEveryMinutes":1}}}'`
   and press Now on Lunch out: "Lunch Is Over" shows at +2 min with "Lunch In Now" and
   "Snooze 15 min" (in the 400 px stack and at 375, on one row or wrapped, never clipped); Lunch In

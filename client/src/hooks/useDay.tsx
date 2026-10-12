@@ -119,7 +119,7 @@ interface DayStore {
    */
   prioritiesSaved: (date: string) => Promise<void>;
   setOvertimeApproved: (date: string, approved: boolean) => Promise<boolean>;
-  /** One alarm's snooze, the epoch ms it rings again; the other alarms' stay. */
+  /** One alarm's snooze, the epoch ms it rings again; the other alarms' already shown, maybe another device's, stay. */
   setSnoozedUntil: (date: string, alarm: AlarmId, until: number) => Promise<boolean>;
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
@@ -551,7 +551,6 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [putDayFields],
   );
 
-  // Only this alarm's key: another alarm's snooze already shown, maybe another device's, stays.
   const setSnoozedUntil = useCallback(
     (date: string, alarm: AlarmId, until: number) =>
       putDayFields(

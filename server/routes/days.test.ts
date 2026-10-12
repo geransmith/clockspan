@@ -182,7 +182,8 @@ describe('PUT /api/days/:date/snooze', () => {
     const until = T0 + 12 * HOUR_MS;
     const ids = 'lunchBy, lunchEnd, clockOut, secondMeal, retro, noBreak';
     for (const body of [{ alarm: 'nap', until }, { until }]) {
-      expect((await snooze(body)).body).toEqual({ error: `alarm must be one of ${ids}.` });
+      const r = await snooze(body);
+      expect([r.status, r.body]).toEqual([400, { error: `alarm must be one of ${ids}.` }]);
     }
     const { to } = punchWindow('2026-09-01');
     for (const body of [{ alarm: 'lunchBy', until: 'soon' }, { alarm: 'lunchBy' }, { alarm: 'lunchBy', until: to + 1 }]) {

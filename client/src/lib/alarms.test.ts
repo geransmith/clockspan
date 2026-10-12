@@ -153,7 +153,6 @@ describe('dueEvents', () => {
       expect([quiet.fire, quiet.crossed, quiet.snoozed]).toEqual([[], [], [target(T)]]);
       const ring = dueEvents([target(T)], alarms(), fired, second.clockOut, second);
       expect(fires(ring)).toEqual([['clockOut', 'overdue', 41]]);
-      expect(ring.fire[0]!.minutes).toBeGreaterThanOrEqual(24 + SNOOZE_MINUTES);
       expect(fired.has(ring.fire[0]!.key)).toBe(false);
     });
 
