@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import type { Settings } from '../types';
+import type { AlarmId, Day, Settings } from '../types';
 import type { TimeclockResult } from '../lib/timeclock';
-import { ALARM_TAG, alarmTargets, describeEvent, dueEvents, type TargetDay } from '../lib/alarms';
-import { alert, dismissByTag } from '../lib/alerts';
+import { ALARM_TAG, alarmTargets, describeEvent, describeSnooze, dueEvents, SNOOZE_MINUTES, snoozable, type TargetDay } from '../lib/alarms';
+import { alert, dismissByTag, type BannerAction } from '../lib/alerts';
 import { ALARM_ACTIONS, MISSED_CLOCK_IN } from '../lib/copy';
 import { formatTime, resolveHour12 } from '../lib/format';
 import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
@@ -27,6 +27,10 @@ export interface AlarmDayState extends TargetDay {
   startBreak: (minutes: number) => Promise<void>;
   /** A timer start is out (`useTimer().starting`), so Start Break does nothing. */
   timerStarting: boolean;
+  /** Today's snoozes (`Day.snoozedUntil`), from any device. */
+  snoozedUntil: Day['snoozedUntil'];
+  /** A banner's Snooze: stores when that alarm rings again. */
+  snooze: (id: AlarmId) => void;
 }
 
 // Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps
@@ -40,12 +44,28 @@ const CLOCK_IN_KEY = 'clockIn:missing';
  * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
-  const { overtimeApproved, retroDone, breaks, timerRunning, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow, startBreak, timerStarting } =
-    day;
+  const {
+    overtimeApproved,
+    retroDone,
+    breaks,
+    timerRunning,
+    approveOvertime,
+    openRetro,
+    missedClockIn,
+    clockInAt,
+    lunchInNow,
+    startBreak,
+    timerStarting,
+    snoozedUntil,
+    snooze,
+  } = day;
   // Read at the press, not when the banner went up.
   const starting = useLatest(timerStarting);
   const fired = useRef<{ date: string; set: Set<string> } | null>(null);
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
+  // Each snoozed alarm's quiet banner, by the time it was raised for: a new time (a second press)
+  // raises it again. Not a flag, since a ring banner closed by hand never passes the dismissals here.
+  const quiet = useRef(new Map<AlarmId, number>());
 
   useEffect(() => {
     // Every alarm banner belongs to one day's clock-in. A new day, or a clock-in cleared, takes
@@ -54,6 +74,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     const clearBanners = () => {
       for (const id of Object.keys(lastTargets.current)) dismissByTag(ALARM_TAG + id);
       lastTargets.current = {};
+      quiet.current.clear();
     };
     if (fired.current?.date !== dateKey) {
       clearBanners();
@@ -83,7 +104,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
           tone: 'info',
           sticky: true,
           tag: CLOCK_IN_TAG,
-          action: { label: MISSED_CLOCK_IN.action(time), run: () => clockInAt(missedClockIn) },
+          actions: [{ label: MISSED_CLOCK_IN.action(time), run: () => clockInAt(missedClockIn) }],
           sound: false,
           notifications: false,
         });
@@ -98,11 +119,29 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // pushed later) is stale; clear it before evaluating the new state.
     for (const t of targets) {
       const prev = lastTargets.current[t.id];
-      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= MINUTE_MS)) dismissByTag(ALARM_TAG + t.id);
+      if (prev && (prev.armed !== t.armed || Math.abs(prev.at - t.at) >= MINUTE_MS)) {
+        dismissByTag(ALARM_TAG + t.id);
+        quiet.current.delete(t.id);
+      }
       lastTargets.current[t.id] = { at: t.at, armed: t.armed };
     }
 
-    const { fire, crossed } = dueEvents(targets, settings.alarms, fired.current.set, now);
+    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
+    const { fire, crossed, snoozed } = dueEvents(targets, settings.alarms, fired.current.set, now, snoozedUntil);
+    // Raised from the day, never the press, so every device and tab shows it, a reload included.
+    for (const t of snoozed) {
+      const until = snoozedUntil[t.id]!;
+      if (quiet.current.get(t.id) === until) continue;
+      quiet.current.set(t.id, until);
+      alert({ ...describeSnooze(t, until, ctx), tone: 'info', sticky: true, tag: ALARM_TAG + t.id, sound: false, notifications: false });
+    }
+    // A snooze gone before its time (a failed save, Repeat turned Off, the alarm switched off).
+    for (const [id, until] of quiet.current) {
+      if (now < until && !snoozed.some((t) => t.id === id)) {
+        dismissByTag(ALARM_TAG + id);
+        quiet.current.delete(id);
+      }
+    }
     if (crossed.length === 0) return;
     for (const k of crossed) fired.current.set.add(k);
     // With storage blocked (private mode, quota) alarms may repeat after a reload, which is acceptable.
@@ -111,7 +150,6 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     // Every alarm banner is sticky: the chime is what grabs attention, and the banner has to
     // still be there — saying which alarm and why — when the user looks up. The next
     // threshold replaces it (same tag) and a moved/disarmed target clears it (above).
-    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
     const minutes = settings.breakMinutes;
     // The break goes out on the day store's queue and a timer start on the timer's, so either could land first.
     const takeBreak = () => {
@@ -120,7 +158,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     for (const e of fire) {
       const { kicker, title, body, tone } = describeEvent(e, ctx);
       // A warning for a typed Clock out has no overtime to approve: the day ends at that time.
-      const action =
+      const own =
         e.id === 'clockOut' && approveOvertime && e.target !== tc.typedClockOut
           ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
           : e.id === 'retro'
@@ -131,6 +169,9 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
               : e.id === 'noBreak'
                 ? { label: ALARM_ACTIONS.startBreak(minutes), run: takeBreak }
                 : undefined;
+      const actions: BannerAction[] = own ? [own] : [];
+      // Past the deadline only, so a warning seen late counts and one before it doesn't.
+      if (now >= e.target && snoozable(e.id, settings.alarms[e.id])) actions.push({ label: ALARM_ACTIONS.snooze(SNOOZE_MINUTES), run: () => snooze(e.id) });
       alert({
         kicker,
         title,
@@ -140,7 +181,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
         // The break alarm is a nudge, not a deadline: the softer warning sound at every stage.
         chime: e.id === 'noBreak' ? settings.sounds.lead : settings.sounds[e.kind],
         tag: ALARM_TAG + e.id,
-        action,
+        actions: actions.length > 0 ? actions : undefined,
         sound: settings.sound,
         notifications: settings.notifications,
       });
@@ -161,5 +202,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     lunchInNow,
     startBreak,
     starting,
+    snoozedUntil,
+    snooze,
   ]);
 }

@@ -10,8 +10,8 @@ import { Banners } from './Banners';
 vi.mock('../api');
 
 /** A sticky alert, like an alarm's: it stays until it is closed. */
-function raise(title: string, action?: BannerAction) {
-  alert({ title, tone: 'warn', tag: `test:${title}`, sticky: true, sound: false, notifications: false, action });
+function raise(title: string, actions?: BannerAction[]) {
+  alert({ title, tone: 'warn', tag: `test:${title}`, sticky: true, sound: false, notifications: false, actions });
 }
 
 async function renderBanners() {
@@ -64,7 +64,7 @@ describe('Banners', () => {
 
   it("runs a banner's action once and closes that banner, the focus going on unless the action moved it", async () => {
     const run = vi.fn();
-    raise('Clock out', { label: 'Overtime approved', run });
+    raise('Clock out', [{ label: 'Overtime approved', run }]);
     raise('Retrospective');
     await renderBanners();
     const approve = banner('Clock out').getByRole('button', { name: 'Overtime approved' });
@@ -77,12 +77,47 @@ describe('Banners', () => {
 
     // Like Open retrospective, which takes the focus to the note box.
     const note = document.body.appendChild(document.createElement('textarea'));
-    raise('Review the day', { label: 'Open', run: () => note.focus() });
+    raise('Review the day', [{ label: 'Open', run: () => note.focus() }]);
     await settle();
     const open = banner('Review the day').getByRole('button', { name: 'Open' });
     open.focus();
     fireEvent.click(open);
     expect(document.activeElement).toBe(note);
     note.remove();
+  });
+
+  it('draws two buttons in order, each running its own action and closing the banner', async () => {
+    const approve = vi.fn();
+    const snooze = vi.fn();
+    const both = [
+      { label: 'Overtime Approved', run: approve },
+      { label: 'Snooze 15 min', run: snooze },
+    ];
+    raise('Clock out', both);
+    await renderBanners();
+    expect(
+      banner('Clock out')
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Overtime Approved', 'Snooze 15 min', '']);
+    fireEvent.click(banner('Clock out').getByRole('button', { name: 'Snooze 15 min' }));
+    expect(snooze).toHaveBeenCalledOnce();
+    expect(approve).not.toHaveBeenCalled();
+    expect(screen.queryByText('Clock out')).toBeNull();
+
+    raise('Clock out', both);
+    await settle();
+    fireEvent.click(banner('Clock out').getByRole('button', { name: 'Overtime Approved' }));
+    expect(approve).toHaveBeenCalledOnce();
+    expect(snooze).toHaveBeenCalledOnce();
+    expect(screen.queryByText('Clock out')).toBeNull();
+  });
+
+  it('draws no row of buttons, and no stray 0, for a banner without any', async () => {
+    raise('Lunch');
+    raise('Clock out', []);
+    await renderBanners();
+    expect(document.querySelector('.banner-actions')).toBeNull();
+    for (const title of ['Lunch', 'Clock out']) expect(screen.getByText(title).closest('.banner')!.textContent).not.toContain('0');
   });
 });

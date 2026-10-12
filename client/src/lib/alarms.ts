@@ -120,25 +120,47 @@ export function eventKey(id: AlarmId, kind: AlarmKind, minutes: number, target: 
   return `${id}:${kind}:${minutes}:${Math.round(target / MINUTE_MS)}`;
 }
 
+/** How long a banner's Snooze quiets its alarm. */
+export const SNOOZE_MINUTES = 15;
+
+/** Only a repeating alarm can be snoozed, and never the retrospective, which is no deadline. */
+export function snoozable(id: AlarmId, cfg: AlarmSettings): boolean {
+  return id !== 'retro' && cfg.overdueEveryMinutes > 0;
+}
+
 /**
  * Pure scheduler. Returns the events to fire now and the keys crossed that could come round
  * again (for a repeat, only the latest), for the caller to persist. If several thresholds for
  * one target were crossed since the last check (the phone was asleep), only the latest fires,
  * so there is no burst of chimes.
+ *
+ * `snoozedUntil` holds today's snoozes: when each alarm rings again, its Snooze pressed
+ * `SNOOZE_MINUTES` before. A snoozable target whose deadline is at or before its press is
+ * covered: until that time it fires and crosses nothing and is listed in `snoozed`, then it rings
+ * once at that time and repeats a full interval apart from it. A deadline moved past the press
+ * isn't covered, and rings on its own schedule.
  */
 export function dueEvents(
   targets: AlarmTarget[],
   alarms: Record<AlarmId, AlarmSettings>,
   fired: ReadonlySet<string>,
   now: number,
-): { fire: AlarmEvent[]; crossed: string[] } {
+  snoozedUntil: Day['snoozedUntil'] = {},
+): { fire: AlarmEvent[]; crossed: string[]; snoozed: AlarmTarget[] } {
   const fire: AlarmEvent[] = [];
   const crossed: string[] = [];
+  const snoozed: AlarmTarget[] = [];
 
   for (const target of targets) {
     if (!target.armed) continue;
     const cfg = alarms[target.id];
     if (!cfg.enabled) continue;
+    const until = snoozedUntil[target.id];
+    const covered = until != null && snoozable(target.id, cfg) && target.at <= until - SNOOZE_MINUTES * MINUTE_MS;
+    if (covered && now < until) {
+      snoozed.push(target);
+      continue;
+    }
 
     const event = (kind: AlarmKind, minutes: number, at: number): AlarmEvent => ({
       key: eventKey(target.id, kind, minutes, target.at),
@@ -151,10 +173,14 @@ export function dueEvents(
     const candidates = cfg.leadMinutes.map((lead) => event('lead', lead, target.at - lead * MINUTE_MS));
     if (cfg.onDue) candidates.push(event('due', 0, target.at));
     if (cfg.overdueEveryMinutes > 0) {
-      const every = cfg.overdueEveryMinutes;
+      const every = cfg.overdueEveryMinutes * MINUTE_MS;
+      // A snooze's own ring is k = 0, and its repeats count from it, so none lands seconds after it.
+      const from = covered ? until : target.at;
       // Only the latest repeat: for a fixed target k only grows, so an earlier one never comes round again.
-      const k = Math.floor((now - target.at) / (every * MINUTE_MS));
-      if (k > 0) candidates.push(event('overdue', k * every, target.at + k * every * MINUTE_MS));
+      const k = Math.floor((now - from) / every);
+      const at = from + k * every;
+      // Whole minutes past the deadline: a snooze's ring is 15 or more past any repeat before the press, so no key clashes.
+      if (covered || k > 0) candidates.push(event('overdue', Math.floor((at - target.at) / MINUTE_MS), at));
     }
 
     const pending = candidates.filter((c) => c.at <= now && !fired.has(c.key)).sort((a, b) => a.at - b.at);
@@ -163,7 +189,7 @@ export function dueEvents(
     fire.push(pending[pending.length - 1]!);
   }
 
-  return { fire, crossed };
+  return { fire, crossed, snoozed };
 }
 
 /**
@@ -329,4 +355,25 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       };
     }
   }
+}
+
+/**
+ * Each snoozable alarm's overdue title in sentence case, from whole minutes past its deadline; under
+ * one minute, its due title. A new alarm without a line is a type error. The break alarm counts from
+ * the last rest, as its title does.
+ */
+const SNOOZE_LINES: Record<Exclude<AlarmId, 'retro'>, (past: number) => string> = {
+  lunchBy: (past) => (past > 0 ? `Lunch is ${formatMinutes(past)} overdue.` : 'Take lunch now.'),
+  lunchEnd: (past) => (past > 0 ? `Lunch ended ${formatMinutes(past)} ago.` : 'Lunch is over.'),
+  clockOut: (past) => (past > 0 ? `Clock-out is ${formatMinutes(past)} overdue.` : 'Time to clock out.'),
+  secondMeal: (past) => (past > 0 ? `Second meal period is ${formatMinutes(past)} overdue.` : 'Take your second meal period.'),
+  noBreak: (past) => `${formatMinutes(NO_BREAK_MINUTES + past)} without a break.`,
+};
+
+/** The quiet banner a snoozed alarm shows in place of its own until `until`, counted at `ctx.now`. */
+export function describeSnooze(target: AlarmTarget, until: number, ctx: Pick<EventContext, 'hour12' | 'now'>): { kicker: string; title: string; body: string } {
+  const time = formatTime(until, ctx.hour12);
+  // `dueEvents` never lists the retrospective as snoozed.
+  const line = SNOOZE_LINES[target.id as Exclude<AlarmId, 'retro'>](Math.floor((ctx.now - target.at) / MINUTE_MS));
+  return { kicker: ALARM_NAMES[target.id], title: `Snoozed Until ${time}`, body: `${line} It rings again at ${time}.` };
 }

@@ -485,7 +485,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       sticky: true,
       chime: settings.sounds.timer,
       tag: 'timer-due',
-      action: canAdd ? { label: TIMER_DUE.more(step), run: () => void adjust(step * 60) } : undefined,
+      actions: canAdd ? [{ label: TIMER_DUE.more(step), run: () => void adjust(step * 60) }] : undefined,
       sound: fresh && settings.sound,
       notifications: fresh && settings.notifications,
     });

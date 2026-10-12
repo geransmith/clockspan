@@ -1,4 +1,5 @@
 import type {
+  AlarmId,
   AuthInfo,
   Board,
   BoardCard,
@@ -23,6 +24,7 @@ import type {
   Session,
   SessionResponse,
   Settings,
+  SnoozeResponse,
   TargetResponse,
   UserResponse,
   UsersResponse,
@@ -65,7 +67,7 @@ function askReload(text: { title: string; body: string; reload: string }, tag: s
     tone: 'info',
     tag,
     sticky: true,
-    action: { label: text.reload, run: () => window.location.reload() },
+    actions: [{ label: text.reload, run: () => window.location.reload() }],
     sound: false,
     notifications: false,
   });
@@ -208,6 +210,8 @@ export const putPunches = (date: string, punches: Punch[], base: Punch[]) => {
 export const putPriorities = (date: string, priorities: Priority[], base: Priority[]) =>
   request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, base });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
+/** One alarm's snooze, the epoch ms it rings again; the answer is every alarm's on the day. */
+export const putSnooze = (date: string, alarm: AlarmId, until: number) => request<SnoozeResponse>('PUT', `/api/days/${date}/snooze`, { alarm, until });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
 export const getRange = (from: string, to: string) => request<RangeResponse>('GET', `/api/days/range?from=${from}&to=${to}`);

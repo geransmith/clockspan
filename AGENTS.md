@@ -848,7 +848,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none. The
   missed clock-in banner's key, `clockIn:missing`, sits in the same set with no minute, so that
   banner shows once a day per device, in a tab that is shown: a hidden tab neither raises it nor
-  writes the key.
+  writes the key. A snooze is not a fired key: an alarm's snooze is its time in today's
+  `snoozedUntil` (`PUT /days/:date/snooze`), so it reaches every device and tab. The route sets one
+  alarm's time and keeps the others', as a task's PATCH sets one weekday, so two devices' snoozes
+  both land. Only a repeating alarm can be snoozed, never the retrospective (`snoozable`), and the
+  snooze covers it while its deadline is at or before the press (the time less `SNOOZE_MINUTES`):
+  `dueEvents` fires nothing for it until that time, and `useAlarms` raises a quiet banner in its
+  place under its tag, once per tab per time, from the day and never from the press. It rings once
+  at that time and its repeats count from it. A deadline moved past the press re-arms the alarm;
+  a snooze gone before its time (a failed save, Repeat turned off) takes the quiet banner down.
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another
@@ -1057,9 +1065,11 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   `switch-exhaustiveness-check` lint refuses a missing one) needs a title for each kind that says
   when (how long is left, that it is now, or how long past; the retrospective's warning, not a
   deadline, gives the end time in its body instead) and a body that says where the deadline came
-  from (widen `EventContext`'s `Pick` if it needs another setting). A banner can carry one
-  `action` button (see the clock-out alarm's "Overtime Approved" and the retro alarm's
-  "Open Retrospective", chosen in `useAlarms` from the `AlarmDayState` callbacks).
+  from (widen `EventContext`'s `Pick` if it needs another setting), and its quiet line in
+  `describeSnooze`'s record (`SNOOZE_LINES`; a missing one is a type error). A banner takes a list
+  of `actions`: the alarm's own button first (see the clock-out alarm's "Overtime Approved" and
+  the retro alarm's "Open Retrospective", chosen in `useAlarms` from the `AlarmDayState`
+  callbacks), then "Snooze 15 min" on a repeating alarm once its deadline has passed (`snoozable`).
 - **A per-day field** (like `overtimeApproved`, `retroNote`/`retroAt`): append a migration
   adding the column to `days` → add the column to `DAY_COLUMNS` and to the `DayRow` interface
   beside it (`routes/shared.ts`, read by `findDay` beside it and `daysInRange` in
@@ -1239,10 +1249,10 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   reason in the PR body, which becomes the squash commit's message on `main`.
 - **Copy**: what the app raises at the user (celebrations, the priority warnings, confirms,
   alerts and banners, the sheet's notices) lives in `client/src/lib/copy.ts`, never inline;
-  alarm lines are built in `describeEvent()`. Labels, settings hints and empty-state lines sit
-  beside the control or view they describe, and must not assume a card order the user can
-  change ("above", "at the bottom"). Write all of it plainly and check new ones against
-  Wikipedia's "Signs of AI writing"
+  alarm lines are built in `describeEvent()` and `describeSnooze()`. Labels, settings hints and
+  empty-state lines sit beside the control or view they describe, and must not assume a card
+  order the user can change ("above", "at the bottom"). Write all of it plainly and check new
+  ones against Wikipedia's "Signs of AI writing"
   (https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing): no "not just X, but Y", no
   rule-of-three flourishes, no em-dash chains, no "Gentle reminder:" / "Deep breath." openers,
   no cheerleading, no puffery words. Short, dry, specific.

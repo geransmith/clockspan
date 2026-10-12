@@ -225,6 +225,8 @@ export interface Day {
   retroAt: number | null;
   /** This day's own work-day length in minutes (a half day); null means the user's usual one. */
   workMinutes: number | null;
+  /** Each alarm's snooze on this day, by alarm id: the epoch ms it rings again. Set one alarm at a time. */
+  snoozedUntil: Record<string, number>;
   sessions: Session[];
   /** By start. */
   breaks: Break[];
@@ -248,7 +250,18 @@ export interface Break {
  * `readRange` holds for a day it had that the range's answer leaves out (one pruned since, say).
  */
 export function emptyDay(date: string): Day {
-  return { date, punches: [], priorities: [], overtimeApproved: false, retroNote: '', retroAt: null, workMinutes: null, sessions: [], breaks: [] };
+  return {
+    date,
+    punches: [],
+    priorities: [],
+    overtimeApproved: false,
+    retroNote: '',
+    retroAt: null,
+    workMinutes: null,
+    snoozedUntil: {},
+    sessions: [],
+    breaks: [],
+  };
 }
 
 /** What `GET /days/prune?before=` would delete, plus the server-wide ceiling if one is set. */
@@ -286,6 +299,9 @@ export interface PrioritiesResponse {
 
 /** `PUT /days/:date/overtime`. */
 export type OvertimeResponse = Pick<Day, 'overtimeApproved'>;
+
+/** `PUT /days/:date/snooze`: every alarm's snooze on the day as stored. */
+export type SnoozeResponse = Pick<Day, 'snoozedUntil'>;
 
 /** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */
 export type RetroResponse = Pick<Day, 'retroNote' | 'retroAt'>;

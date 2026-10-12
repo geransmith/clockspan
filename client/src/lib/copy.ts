@@ -266,12 +266,16 @@ export const BREAK_SUGGESTION = {
   start: 'Start Break',
 } as const;
 
-/** The one button an alarm banner can carry: clock-out's, the retrospective's, "Lunch Is Over"'s and the break alarm's. */
+/**
+ * An alarm banner's buttons: its own (clock-out's, the retrospective's, "Lunch Is Over"'s or the
+ * break alarm's) first, then Snooze on a repeating alarm once its deadline has passed.
+ */
 export const ALARM_ACTIONS = {
   approveOvertime: 'Overtime Approved',
   openRetro: 'Open Retrospective',
   lunchInNow: 'Lunch In Now',
   startBreak: (minutes: number) => `Start Break · ${minutes} min`,
+  snooze: (minutes: number) => `Snooze ${minutes} min`,
 } as const;
 
 /** The banner a session or break logged with no Clock in raises once a day (`useAlarms`), and its button. */

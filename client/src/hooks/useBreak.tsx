@@ -131,10 +131,7 @@ export function BreakProvider({ children }: { children: ReactNode }) {
       tone: 'info',
       sticky: true,
       tag: 'break',
-      action: {
-        label: BREAK_SUGGESTION.start,
-        run: () => void start(earned.minutes),
-      },
+      actions: [{ label: BREAK_SUGGESTION.start, run: () => void start(earned.minutes) }],
       sound: false,
       notifications: false,
     });

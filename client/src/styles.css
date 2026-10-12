@@ -1843,10 +1843,15 @@ button.log-label:hover {
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
-.banner-action {
-  align-self: flex-start;
+.banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 6px;
   margin-top: 4px;
+}
+.banner-action {
   min-height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--banner-tone, var(--accent));
   color: var(--banner-ink, var(--accent-ink));
 }
@@ -3124,7 +3129,8 @@ kbd {
   .banner-close {
     --hit-inset: -6px;
   }
-  /* 36 px at the foot of the banner: 44 px. */
+  /* 36 px at the foot of the banner: 44 px to tap. Side by side the buttons sit 6 px apart and each
+     stops at its border; wrapped, the rows sit 8 px apart and each reaches 4 px, half the gap. */
   .banner-action {
     --hit-inset: -5px -1px;
   }

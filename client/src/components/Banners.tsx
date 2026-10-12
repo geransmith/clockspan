@@ -39,7 +39,7 @@ export function Banners() {
     <div className="banners" aria-live="polite">
       {hidden > 0 && <div className="pill banners-more">{BANNERS_MORE(hidden)}</div>}
       {shown.map((b) => {
-        const { action } = b;
+        const { actions } = b;
         return (
           <div key={b.id} className={`banner banner--${b.tone}`}>
             {b.tag.startsWith(ALARM_TAG) && (
@@ -58,16 +58,21 @@ export function Banners() {
               )}
               <strong className="banner-title">{b.title}</strong>
               {b.body && <span className="banner-body">{b.body}</span>}
-              {action && (
-                <button
-                  className="btn btn-ghost banner-action"
-                  onClick={(e) => {
-                    action.run();
-                    closeBanner(b.id, e.currentTarget);
-                  }}
-                >
-                  {action.label}
-                </button>
+              {actions && actions.length > 0 && (
+                <div className="banner-actions">
+                  {actions.map((action) => (
+                    <button
+                      key={action.label}
+                      className="btn btn-ghost banner-action"
+                      onClick={(e) => {
+                        action.run();
+                        closeBanner(b.id, e.currentTarget);
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
             <button className="btn btn-icon banner-close" onClick={(e) => closeBanner(b.id, e.currentTarget)} aria-label={`Dismiss: ${b.title}`}>

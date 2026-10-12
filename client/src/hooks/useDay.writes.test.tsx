@@ -158,6 +158,24 @@ describe('per-day fields', () => {
     await act(async () => expect(await result.current.setOvertimeApproved(TODAY, false)).toBe(false));
   });
 
+  it("setSnoozedUntil shows its alarm's time beside another's at once, takes the answer's object, and says whether it saved", async () => {
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { snoozedUntil: { lunchBy: T0 } })));
+    const saved = deferredAnswer<{ snoozedUntil: Record<string, number> }>();
+    vi.mocked(api.putSnooze).mockReturnValueOnce(saved.promise).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+
+    const done = begin(() => result.current.setSnoozedUntil(TODAY, 'clockOut', T0 + 5));
+    expect(result.current.days[TODAY]?.snoozedUntil).toEqual({ lunchBy: T0, clockOut: T0 + 5 });
+    // Another device snoozed the second meal meanwhile: the route answers every alarm's.
+    saved.resolve({ snoozedUntil: { lunchBy: T0, clockOut: T0 + 5, secondMeal: T0 + 9 } });
+    await act(async () => expect(await done).toBe(true));
+    expect(api.putSnooze).toHaveBeenCalledWith(TODAY, 'clockOut', T0 + 5);
+    expect(result.current.days[TODAY]?.snoozedUntil).toEqual({ lunchBy: T0, clockOut: T0 + 5, secondMeal: T0 + 9 });
+
+    await act(async () => expect(await result.current.setSnoozedUntil(TODAY, 'lunchBy', T0 + 7)).toBe(false));
+  });
+
   it('setRetro keeps the note and stamp it was not asked to change, then takes the stored stamp', async () => {
     vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { retroNote: 'why', retroAt: null })));
     const saved = deferredAnswer<{ retroNote: string; retroAt: number | null }>();

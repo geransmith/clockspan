@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { punchesKey } from '../../../shared/punches.js';
-import { missedClockIn } from '../lib/alarms';
+import { missedClockIn, SNOOZE_MINUTES } from '../lib/alarms';
 import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { floorToMinute } from '../lib/format';
@@ -64,6 +64,9 @@ export function useTodayAlarms(
     timerRunning: Boolean(day?.sessions.some((s) => s.status === 'running')),
     ...timer,
     approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
+    snoozedUntil: day?.snoozedUntil ?? {},
+    // The clock is read at the press, never inside the store's `apply`.
+    snooze: (id) => void store.setSnoozedUntil(today, id, Date.now() + SNOOZE_MINUTES * MINUTE_MS),
     openRetro,
     missedClockIn: day ? missedClockIn(day, settings) : null,
     clockInAt: (at) => {
