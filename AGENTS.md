@@ -419,9 +419,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   goes with the base of the oldest list not sent yet, so it carries every change since. That needs
   every list that takes a waiting one's place to be built on `current()`: the Priorities card
   flushes its draft and a row's note on blur, before any other sheet control acts, and
-  `setPunches`, `editPunches` and `editPriorities` (which `addPriority` and a row's note go
-  through) build on `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the breaks
-  (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
+  `setPunches`, `editPunches` and `editPriorities` (which `addPriority` and a row's note go through)
+  build on `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the
+  breaks (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
   session's writes one at a time on its own queue: start, adjust, edit, pause, resume, finish and
   cancel, the log's edits of the running row included. That queue is not ordered against the day
   store's `session:<id>` queue, which carries the other rows' edits and deletes. Three jobs wait

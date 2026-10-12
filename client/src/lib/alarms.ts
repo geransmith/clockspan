@@ -11,6 +11,8 @@ export interface AlarmTarget {
   armed: boolean;
 }
 
+const cardShown = (layout: Settings['layout'], id: CardId) => layout.some((l) => l.id === id && l.visible);
+
 /** The day's own switches that disarm a target. */
 export interface TargetDay {
   /** Silences the clock-out target only. */
@@ -43,7 +45,7 @@ export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & 
     },
     { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
-    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone && settings.layout.some((l) => l.id === 'retro' && l.visible) },
+    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
   ];
 }
 
@@ -58,14 +60,13 @@ export function missedClockIn(
   settings: Pick<Settings, 'layout' | 'trackHours' | 'mealRules' | 'alarms'>,
 ): number | null {
   const starts = [...day.sessions, ...day.breaks].map((x) => x.startedAt);
-  const shown = (id: CardId) => settings.layout.some((l) => l.id === id && l.visible);
   const { alarms } = settings;
   const counts =
     settings.trackHours ||
     alarms.clockOut.enabled ||
     (settings.mealRules && (alarms.lunchBy.enabled || alarms.secondMeal.enabled)) ||
-    (alarms.retro.enabled && shown('retro'));
-  if (starts.length === 0 || day.punches.some((p) => p.at != null) || !shown('timeclock') || !counts) return null;
+    (alarms.retro.enabled && cardShown(settings.layout, 'retro'));
+  if (starts.length === 0 || day.punches.some((p) => p.at != null) || !cardShown(settings.layout, 'timeclock') || !counts) return null;
   return floorToMinute(Math.min(...starts));
 }
 

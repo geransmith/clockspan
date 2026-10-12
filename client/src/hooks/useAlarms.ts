@@ -8,7 +8,10 @@ import { ALARM_ACTIONS, MISSED_CLOCK_IN } from '../lib/copy';
 import { formatTime, resolveHour12 } from '../lib/format';
 import { addToDaySet, readDaySet, USER_KEYS } from '../lib/storage';
 
-/** The day's switches (which targets are armed is `alarmTargets`), the minute the "Not Clocked In" banner offers, and the banner buttons. */
+/**
+ * The day's switches (which targets are armed is `alarmTargets`), the minute the "Not Clocked In"
+ * banner offers, and the banner buttons.
+ */
 export interface AlarmDayState extends TargetDay {
   /** Left out while the Overtime approval setting is off. */
   approveOvertime?: () => void;
@@ -19,9 +22,9 @@ export interface AlarmDayState extends TargetDay {
   clockInAt: (at: number) => void;
 }
 
-// Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps only the targets.
+// Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps
+// only the targets.
 const CLOCK_IN_TAG = 'clock-in';
-// Its key in today's fired set has no minute: it shows once a day on this device, whatever the first start.
 const CLOCK_IN_KEY = 'clockIn:missing';
 
 /**
