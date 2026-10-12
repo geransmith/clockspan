@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, SETTING_LIMITS } from '../shared/settings.js';
+import { LIMITS } from '../shared/api.js';
+import { DEFAULT_SETTINGS, SETTING_LIMITS, WEEKLY_MEETINGS_MAX } from '../shared/settings.js';
 import { mergeSettings } from './settings.js';
 
 describe('mergeSettings', () => {
@@ -50,6 +51,82 @@ describe('mergeSettings', () => {
     // A save that leaves the layout out keeps the stored columns.
     const stored = { ...DEFAULT_SETTINGS, layout: merged };
     expect(mergeSettings(stored, { sound: false }).layout).toBe(merged);
+  });
+
+  it('keeps the weekly meetings whole, each part checked, its uid lowercased, its days sorted and its title cut', () => {
+    const part = {
+      uid: 'STAND000',
+      title: ` ${'x'.repeat(LIMITS.meetingTitle + 3)} `,
+      weekdays: [5, 1, 3, 3],
+      start: 570,
+      end: 585,
+      since: '2026-10-01',
+      until: null,
+    };
+    expect(mergeSettings(DEFAULT_SETTINGS, { meetings: [part] }).meetings).toEqual([
+      { uid: 'stand000', title: 'x'.repeat(LIMITS.meetingTitle), weekdays: [1, 3, 5], start: 570, end: 585, since: '2026-10-01', until: null },
+    ]);
+    const stored = mergeSettings(DEFAULT_SETTINGS, { meetings: [part] });
+    expect(mergeSettings(stored, { meetings: 'none' }).meetings).toBe(stored.meetings);
+    expect(mergeSettings(stored, { meetings: [] }).meetings).toEqual([]);
+  });
+
+  it('drops a part that is not whole', () => {
+    const good = { uid: 'stand000', title: 'Standup', weekdays: [1], start: 570, end: 585, since: '2026-10-01', until: '2026-10-09' };
+    const bad = [
+      null,
+      { ...good, uid: 'x' },
+      { ...good, title: 5 },
+      { ...good, weekdays: [] },
+      { ...good, weekdays: [0, 8, 1.5] },
+      { ...good, weekdays: 'Mon' },
+      { ...good, start: -1 },
+      { ...good, end: 24 * 60 + 1 },
+      { ...good, end: 570 },
+      { ...good, since: 'soon' },
+      { ...good, until: '2026-09-30' },
+      { ...good, until: 'never' },
+    ];
+    expect(mergeSettings(DEFAULT_SETTINGS, { meetings: bad }).meetings).toEqual([]);
+    expect(mergeSettings(DEFAULT_SETTINGS, { meetings: [{ ...good, weekdays: [8, 2] }] }).meetings[0]?.weekdays).toEqual([2]);
+  });
+
+  it("keeps a meeting's parts apart: one that starts before an earlier part of its uid ends is dropped, in order of their start", () => {
+    const part = (since: string, until: string | null, uid = 'stand000') => ({ uid, title: 'Standup', weekdays: [1], start: 570, end: 585, since, until });
+    const merged = mergeSettings(DEFAULT_SETTINGS, {
+      meetings: [
+        part('2026-10-12', null),
+        part('2026-10-01', '2026-10-11'),
+        part('2026-10-11', null),
+        part('2026-10-20', null),
+        part('2026-10-05', null, 'other000'),
+      ],
+    }).meetings;
+    expect(merged.map((w) => [w.uid, w.since, w.until])).toEqual([
+      ['stand000', '2026-10-01', '2026-10-11'],
+      ['other000', '2026-10-05', null],
+      ['stand000', '2026-10-12', null],
+    ]);
+  });
+
+  it(`keeps at most ${WEEKLY_MEETINGS_MAX} parts, dropping those that ended longest ago first`, () => {
+    const part = (i: number, until: string | null) => ({
+      uid: `m${String(i).padStart(7, '0')}`,
+      title: '',
+      weekdays: [1],
+      start: 0,
+      end: 1,
+      since: '2026-09-01',
+      until,
+    });
+    const ended = Array.from({ length: WEEKLY_MEETINGS_MAX }, (_, i) => part(i, `2026-09-${String(2 + (i % 20)).padStart(2, '0')}`));
+    const kept = mergeSettings(DEFAULT_SETTINGS, { meetings: [part(500, null), ...ended, part(501, null)] }).meetings;
+    expect(kept).toHaveLength(WEEKLY_MEETINGS_MAX);
+    expect(kept.filter((w) => w.until == null).map((w) => w.uid)).toEqual(['m0000500', 'm0000501']);
+    // The two dropped ended on the earliest day of all.
+    expect(kept.filter((w) => w.until === '2026-09-02')).toHaveLength(3);
+    const running = Array.from({ length: WEEKLY_MEETINGS_MAX + 1 }, (_, i) => part(i, null));
+    expect(mergeSettings(DEFAULT_SETTINGS, { meetings: running }).meetings).toHaveLength(WEEKLY_MEETINGS_MAX);
   });
 
   it('keeps retention within bounds, field by field', () => {

@@ -15,10 +15,15 @@ import {
   THEMES,
   TIMER_MINUTES,
   TIME_FORMATS,
+  WEEKLY_MEETINGS_MAX,
   type AlarmSettings,
   type RetentionSettings,
   type Settings,
+  type WeeklyMeeting,
 } from '../shared/settings.js';
+import { isValidDateKey } from '../shared/dates.js';
+import { meetingTitle } from '../shared/text.js';
+import { UID_RE } from './routes/shared.js';
 import { SOUND_EVENTS, SOUND_IDS, type SoundEvent, type SoundId } from '../shared/sounds.js';
 import { isOneOf, isWholeNumber } from './validate.js';
 
@@ -73,6 +78,43 @@ function mergeTimerMinutes(base: number[], patch: unknown): number[] {
   return base.map((m, i) => whole(next[i], TIMER_MINUTES, m));
 }
 
+const ISO_DAY = { min: 1, max: 7 } as const;
+const DAY_MINUTE = { min: 0, max: 24 * 60 } as const;
+
+/**
+ * The weekly meetings' parts, a list saved whole: a part that isn't whole (a uid's shape, a day from
+ * 1 to 7, minutes of the day with the end after the start, `until` null or not before `since`), or
+ * that starts before an earlier part of its uid ends, is dropped. Past `WEEKLY_MEETINGS_MAX` the parts
+ * that ended longest ago go first, so a change, which ends one part and starts another, never loses
+ * a meeting that runs on. Kept in order of `since`.
+ */
+function mergeMeetings(base: WeeklyMeeting[], patch: unknown): WeeklyMeeting[] {
+  if (!Array.isArray(patch)) return base;
+  const parts: WeeklyMeeting[] = [];
+  for (const item of patch as unknown[]) {
+    const m = record(item);
+    if (!m || typeof m.uid !== 'string' || !UID_RE.test(m.uid) || typeof m.title !== 'string') continue;
+    const weekdays = Array.isArray(m.weekdays) ? [...new Set(m.weekdays.filter((d): d is number => isWholeNumber(d, ISO_DAY)))].sort((a, b) => a - b) : [];
+    const { start, end, since, until } = m;
+    if (weekdays.length === 0 || !isWholeNumber(start, DAY_MINUTE) || !isWholeNumber(end, DAY_MINUTE) || end <= start) continue;
+    if (!isValidDateKey(since) || !(until === null || (isValidDateKey(until) && until >= since))) continue;
+    parts.push({ uid: m.uid.toLowerCase(), title: meetingTitle(m.title), weekdays, start, end, since, until });
+  }
+  // Each uid's latest end so far ('' before its first part, null once a part runs on).
+  const ends = new Map<string, string | null>();
+  const kept = parts
+    .sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : 0))
+    .filter((w) => {
+      const end = ends.has(w.uid) ? ends.get(w.uid)! : '';
+      if (end === null || w.since <= end) return false;
+      ends.set(w.uid, w.until);
+      return true;
+    });
+  const ended = kept.filter((w) => w.until != null).sort((a, b) => (a.until! < b.until! ? -1 : a.until! > b.until! ? 1 : 0));
+  const dropped = new Set(ended.slice(0, kept.length - WEEKLY_MEETINGS_MAX));
+  return kept.filter((w) => !dropped.has(w)).slice(0, WEEKLY_MEETINGS_MAX);
+}
+
 /**
  * Merge a patch onto `base` (the defaults on a read, the user's stored settings on a write),
  * validating every field. Unknown keys are dropped and an invalid value keeps `base`'s, so a
@@ -124,6 +166,7 @@ export function mergeSettings(base: Settings, patch: unknown): Settings {
     alarms: mergeAlarms(base.alarms, p.alarms),
     layout,
     retention: mergeRetention(base.retention, p.retention),
+    meetings: mergeMeetings(base.meetings, p.meetings),
   };
 }
 

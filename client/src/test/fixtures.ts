@@ -95,6 +95,7 @@ export const TEST_SETTINGS: Settings = {
   },
   layout: CARD_IDS.map((id) => ({ id, visible: true, side: TEST_SIDES[id] })),
   retention: { enabled: false, days: 365 },
+  meetings: [],
 };
 
 export function makeSettings(patch: Partial<Settings> = {}): Settings {

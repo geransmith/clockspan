@@ -230,16 +230,20 @@ export interface Day {
   snoozedUntil: Record<string, number>;
   /** When the morning offer was first answered, from any device (null = not yet): a day stamped offers nothing. */
   offerAnsweredAt: number | null;
-  /** This day's meetings by uid, set one at a time; null takes a meeting off this day. */
+  /** This day's meetings by uid, set or cleared one at a time; null takes a weekly meeting off this day. */
   meetings: Record<string, Meeting | null>;
   sessions: Session[];
   /** By start. */
   breaks: Break[];
 }
 
-/** A meeting on a day: time at work that is neither focus nor rest. `title` may be ''. */
+/**
+ * A meeting on a day: time at work that is neither focus nor rest. A one-off's `title` may be '';
+ * null is a weekly meeting's own times on that day, under the weekly meeting's title, and shows
+ * nothing once that weekly meeting is gone.
+ */
 export interface Meeting {
-  title: string;
+  title: string | null;
   startsAt: number;
   endsAt: number;
 }
@@ -320,7 +324,7 @@ export type OvertimeResponse = Pick<Day, 'overtimeApproved'>;
 /** `PUT /days/:date/snooze`: every alarm's snooze on the day as stored. */
 export type SnoozeResponse = Pick<Day, 'snoozedUntil'>;
 
-/** `PUT /days/:date/meetings`: every meeting key on the day as stored. */
+/** `PUT` and `DELETE /days/:date/meetings`: every meeting key on the day as stored. */
 export type MeetingsResponse = Pick<Day, 'meetings'>;
 
 /** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */

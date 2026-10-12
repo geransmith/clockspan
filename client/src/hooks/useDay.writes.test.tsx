@@ -206,6 +206,28 @@ describe('per-day fields', () => {
     expect(result.current.days[TODAY]?.meetings).toEqual({ aaaa1111: null, bbbb2222: call });
 
     await act(async () => expect(await result.current.setMeeting(TODAY, 'bbbb2222', null)).toBe(false));
+    // A weekly meeting's own times on the day carry no title of their own.
+    vi.mocked(api.putMeeting).mockReturnValueOnce(new Promise(() => {}));
+    void result.current.setMeeting(TODAY, 'cccc3333', { ...call, title: null });
+    await settle();
+    expect(result.current.days[TODAY]?.meetings.cccc3333).toEqual({ ...call, title: null });
+  });
+
+  it("clearMeeting takes the meeting's entry off the day at once, takes the answer, and says whether it saved", async () => {
+    const call = { title: 'Call', startsAt: T0, endsAt: T0 + HOUR_MS };
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { meetings: { aaaa1111: call, bbbb2222: null } })));
+    const saved = deferredAnswer<{ meetings: Record<string, Meeting | null> }>();
+    vi.mocked(api.deleteMeeting).mockReturnValueOnce(saved.promise).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+
+    const done = begin(() => result.current.clearMeeting(TODAY, 'aaaa1111'));
+    expect(result.current.days[TODAY]?.meetings).toEqual({ bbbb2222: null });
+    saved.resolve({ meetings: { bbbb2222: null } });
+    await act(async () => expect(await done).toBe(true));
+    expect(api.deleteMeeting).toHaveBeenCalledWith(TODAY, 'aaaa1111');
+
+    await act(async () => expect(await result.current.clearMeeting(TODAY, 'bbbb2222')).toBe(false));
   });
 
   it('setRetro keeps the note and stamp it was not asked to change, then takes the stored stamp', async () => {

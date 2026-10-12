@@ -103,6 +103,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
     `/api/days/${TODAY}/meetings`,
     { uid: 'abcdef12', meeting: { title: 'Standup', startsAt: 5, endsAt: 9 } },
   ],
+  ['deleteMeeting', () => api.deleteMeeting(TODAY, 'abcdef12'), 'DELETE', `/api/days/${TODAY}/meetings/abcdef12`, undefined],
   ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
   ['putOffer', () => api.putOffer(TODAY), 'PUT', `/api/days/${TODAY}/offer`, undefined],

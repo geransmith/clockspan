@@ -217,6 +217,8 @@ export const putSnooze = (date: string, alarm: AlarmId, until: number) => reques
 /** One meeting on the day by its uid, or null to take it off the day; the day's other meetings stay. */
 export const putMeeting = (date: string, uid: string, meeting: Meeting | null) =>
   request<MeetingsResponse>('PUT', `/api/days/${date}/meetings`, { uid, meeting });
+/** Clears the day's own entry for a meeting: a one-off leaves the day, a weekly one follows its usual times again. */
+export const deleteMeeting = (date: string, uid: string) => request<MeetingsResponse>('DELETE', `/api/days/${date}/meetings/${uid}`);
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
 export const putOffer = (date: string) => request<OfferResponse>('PUT', `/api/days/${date}/offer`);
