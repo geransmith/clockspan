@@ -8,7 +8,7 @@ import type { Route } from '../hooks/useRoute';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { warnSaveFailed } from '../lib/alerts';
-import { LOAD_FAILED, PUNCH_ORDER } from '../lib/copy';
+import { LOAD_FAILED, NO_CLOCK_OUT, PUNCH_ORDER } from '../lib/copy';
 import { startOfWeek } from '../../../shared/dates.js';
 import { dayName } from '../lib/format';
 import { unlessGone } from '../lib/apiError';
@@ -321,7 +321,7 @@ function StatePill({ state, isToday }: { state: TimeclockState; isToday: boolean
   // A past day is judged at its end, so one still "working" there was never clocked out.
   const map = {
     'not-started': ['Not clocked in', ''],
-    working: isToday ? ['Working', 'pill--ok'] : ['No clock-out', 'pill--warn'],
+    working: isToday ? ['Working', 'pill--ok'] : [NO_CLOCK_OUT, 'pill--warn'],
     'at-lunch': ['At lunch', 'pill--warn'],
     'on-break': ['On break', 'pill--warn'],
     done: [isToday ? 'Done for today' : 'Done', 'pill--accent'],

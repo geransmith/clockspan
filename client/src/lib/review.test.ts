@@ -142,6 +142,20 @@ describe('reviewRange', () => {
     });
   });
 
+  it('leaves a past day left clocked in out of the hours and the target, and counts the rest of it', () => {
+    const open = makeDay('2026-09-14', {
+      punches: punchesAt(at('2026-09-14', 9)),
+      priorities: [makePriority(1, 'Ship it', { done: true })],
+    });
+    const fine = makeDay('2026-09-15', { punches: punchesAt(at('2026-09-15', 8), null, null, at('2026-09-15', 16)) });
+    expect(reviewRange([open, fine], settings, '2026-09-16', now)).toMatchObject({
+      days: 2,
+      workedSeconds: 8 * 3600,
+      targetSeconds: 8 * 3600,
+      prioritiesDone: 1,
+    });
+  });
+
   it('counts completed sessions, not a running or a cancelled one', () => {
     const day = makeDay('2026-09-16', {
       sessions: [

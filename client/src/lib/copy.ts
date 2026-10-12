@@ -283,6 +283,9 @@ export const PUNCH_ORDER = (row: string, at: string, after: string, afterAt: str
 /** The Worked and Clock Out At tiles' line while the punches are out of order, where any number would be a guess. */
 export const CHECK_PUNCHES = 'Check punches';
 
+/** A past day left clocked in: its pill, and its line wherever its hours would show. */
+export const NO_CLOCK_OUT = 'No clock-out';
+
 /** A session logged without a label, wherever sessions are listed. */
 export const UNTITLED_SESSION = 'Untitled session';
 
