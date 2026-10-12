@@ -9,7 +9,6 @@ import { ApiError } from '../lib/apiError';
 import { LEFT_OPEN, LOAD_FAILED, PUNCH_ORDER, REMOVE_TASK, TODAY_OFFER } from '../lib/copy';
 import { SPLIT_QUERY } from '../lib/layout';
 import { applySettingsPatch } from '../lib/settings';
-import { USER_KEYS } from '../lib/storage';
 import {
   ADMIN,
   answered,
@@ -34,7 +33,7 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { Board, CardId, Day, Settings } from '../types';
+import type { Board, CardId, Day, PrioritiesResponse, Settings } from '../types';
 import { Sheet } from './Sheet';
 import { SortableCards } from './SortableCards';
 
@@ -100,6 +99,19 @@ function columns(): string[][] {
 
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
 const savedLayout = () => vi.mocked(api.putSettings).mock.lastCall?.[0].layout?.map((l) => `${l.id}:${l.side}`);
+
+/**
+ * The server's stamp on today's morning offer: `putOffer` keeps the first, and `getDay` answers
+ * `day` with it, above the ranges' revision, so a reload reads what was sent.
+ */
+function serveOffer(day: Day = makeDay()) {
+  let stamp: number | null = null;
+  vi.mocked(api.putOffer).mockImplementation(() => Promise.resolve(answered({ offerAnsweredAt: (stamp ??= Date.now()) })));
+  vi.mocked(api.getDay).mockImplementation(() => Promise.resolve(answered({ ...day, offerAnsweredAt: stamp }, 1)));
+}
+
+/** Whether the sheet read the days before today for what the last plan left open. */
+const lookedBack = () => vi.mocked(api.getRange).mock.calls.some(([, to]) => to === YESTERDAY);
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -487,7 +499,7 @@ describe('Sheet: what the last day left open', () => {
   });
 
   it("offers the top of Next less the last plan's tasks once they are read, ticked to fill Rows per day, held by Start fresh, and added with each task kept in Next", async () => {
-    localStorage.clear();
+    serveOffer();
     vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
     // Ticked on yesterday's sheet since the board was read, which still has it open in Next.
     const ticked = makePriority(2, 'Ticked yesterday', { uid: 'next00000001', done: true });
@@ -521,11 +533,14 @@ describe('Sheet: what the last day left open', () => {
       ['Write a KB', false],
     ]);
     fireEvent.click(button(LEFT_OPEN.dismiss));
+    await settle();
+    expect(api.putOffer).toHaveBeenCalledExactlyOnceWith(TODAY);
     cleanup();
     await renderSheet();
     expect(document.querySelector('.today-offer')).toBeNull();
 
-    localStorage.clear();
+    // A day not answered yet.
+    serveOffer();
     serveRange([yesterday]);
     cleanup();
     await renderSheet();
@@ -547,21 +562,81 @@ describe('Sheet: the recurring priorities due today', () => {
   };
 
   beforeEach(() => {
-    localStorage.clear();
+    serveOffer();
     vi.mocked(api.getBoard).mockResolvedValue(answered({ ...makeBoard(), recurring: [SATURDAY, QUEUE] }));
     vi.mocked(api.putPriorities).mockImplementation(echoPriorities);
   });
 
-  it('offers the ones due on its weekday, and none answered on this device today', async () => {
+  it('offers the ones due on its weekday, and nothing on a day whose offer was answered, which it reads nothing more for', async () => {
     await renderSheet();
     expect(offered()).toEqual(['Monitor the queue']);
     expect(screen.getByText(TODAY_OFFER.recurring)).toBeTruthy();
-    localStorage.setItem(USER_KEYS.recurringAnswered, `${TODAY} ${QUEUE.uid}`);
+    expect(lookedBack()).toBe(true);
+    // Answered on another device.
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { offerAnsweredAt: T0 }), 1));
+    vi.mocked(api.getRange).mockClear();
     await reload();
     expect(document.querySelector('.today-offer')).toBeNull();
-    // Answers from another day count for nothing.
-    localStorage.setItem(USER_KEYS.recurringAnswered, `${YESTERDAY} ${QUEUE.uid}`);
+    expect(lookedBack()).toBe(false);
+  });
+
+  it("takes the notice down when a refresh brings another device's answer", async () => {
+    // The day store the sheet uses, to read today again as the refresh loop or the live stream would.
+    const { result } = renderHook(() => useDayStore(), {
+      wrapper: ({ children }) => (
+        <AppProviders>
+          <SheetAt />
+          {children}
+        </AppProviders>
+      ),
+    });
+    await settle();
+    expect(offered()).toEqual(['Monitor the queue']);
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { offerAnsweredAt: T0 }), 2));
+    await act(() => result.current.refresh(TODAY));
+    await settle();
+    expect(document.querySelector('.today-offer')).toBeNull();
+  });
+
+  it('holds the routines while the lookback read is out, and shows them once it fails', async () => {
+    const lookback = deferredAnswer<{ days: Day[] }>();
+    vi.mocked(api.getRange).mockImplementation((_from, to) => (to === YESTERDAY ? lookback.promise : Promise.resolve(answered({ days: [] }))));
+    await renderSheet();
+    expect(api.getBoard).toHaveBeenCalled();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    lookback.reject(new Error('offline'));
+    await settle();
+    expect(offered()).toEqual(['Monitor the queue']);
+  });
+
+  it("stamps the day once Add to Today's save is in, and not when it fails, which offers again", async () => {
+    const save = deferredAnswer<PrioritiesResponse>();
+    vi.mocked(api.putPriorities).mockReturnValueOnce(save.promise).mockRejectedValueOnce(new Error('offline'));
+    await renderSheet();
+    fireEvent.click(button(LEFT_OPEN.add));
+    await settle();
+    expect(api.putOffer).not.toHaveBeenCalled();
+    save.resolve({ priorities: vi.mocked(api.putPriorities).mock.calls[0]![1].filter((p) => p.uid != null) });
+    await settle();
+    expect(api.putOffer).toHaveBeenCalledExactlyOnceWith(TODAY);
+    expect(document.querySelector('.today-offer')).toBeNull();
+
+    serveOffer();
     await reload();
+    fireEvent.click(button(LEFT_OPEN.add));
+    await settle();
+    expect(api.putPriorities).toHaveBeenCalledTimes(2);
+    expect(api.putOffer).toHaveBeenCalledTimes(1);
+    expect(offered()).toEqual(['Monitor the queue']);
+  });
+
+  it("brings the notice back and says so when Not today's stamp fails", async () => {
+    vi.mocked(api.putOffer).mockRejectedValueOnce(new Error('offline'));
+    await renderSheet();
+    fireEvent.click(button(TODAY_OFFER.notToday));
+    expect(document.querySelector('.today-offer')).toBeNull();
+    await settle();
+    expect(warnSaveFailed).toHaveBeenCalledTimes(1);
     expect(offered()).toEqual(['Monitor the queue']);
   });
 
@@ -584,31 +659,33 @@ describe('Sheet: the recurring priorities due today', () => {
     expect(document.querySelector('.today-offer')).toBeNull();
   });
 
-  it('shows the leftovers beside them, and Not today holds both for the day', async () => {
+  it('shows the leftovers beside them, and Not today stamps the day at once, saving no list', async () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
     await renderSheet();
     expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
     fireEvent.click(button(TODAY_OFFER.notToday));
     await settle();
     expect(document.querySelector('.today-offer')).toBeNull();
+    expect(api.putOffer).toHaveBeenCalledExactlyOnceWith(TODAY);
     expect(api.putPriorities).not.toHaveBeenCalled();
     await reload();
     expect(document.querySelector('.today-offer')).toBeNull();
   });
 
-  it('leaves the leftovers for later when Not today answers the routines alone', async () => {
+  it('shows the routines with no lookback read while a one-off is written, and Not today then holds the leftovers too', async () => {
     serveRange([makeDay(YESTERDAY, { priorities: [makePriority(1, 'Invoices')] })]);
-    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { priorities: [makePriority(1, 'Report')] }), 1));
+    serveOffer(makeDay(TODAY, { priorities: [makePriority(1, 'Report')] }));
     await renderSheet();
     expect(offered()).toEqual(['Monitor the queue']);
+    expect(lookedBack()).toBe(false);
     fireEvent.click(button(TODAY_OFFER.notToday));
     await settle();
     expect(document.querySelector('.today-offer')).toBeNull();
-    // With the one-off taken off, the list has no plan, and the leftovers are offered.
+    // With the one-off taken off the list has no plan, but the day is answered: nothing is offered or read.
     fireEvent.click(button('Remove priority 1'));
     await settle();
-    expect(offered()).toEqual(['Invoices']);
-    expect(screen.getByText(LEFT_OPEN.title('Yesterday'))).toBeTruthy();
+    expect(document.querySelector('.today-offer')).toBeNull();
+    expect(lookedBack()).toBe(false);
   });
 
   it("offers nothing on another day's sheet, though today's routines are due", async () => {

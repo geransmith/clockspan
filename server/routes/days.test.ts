@@ -32,6 +32,7 @@ describe('GET /api/days/:date', () => {
       retroAt: null,
       workMinutes: null,
       snoozedUntil: {},
+      offerAnsweredAt: null,
       sessions: [],
       breaks: [],
     });
@@ -239,6 +240,19 @@ describe('PUT /api/days/:date/retro', () => {
   });
 });
 
+describe('PUT /api/days/:date/offer', () => {
+  it("stamps the day's morning offer answered, keeps the first stamp, and every read carries it", async () => {
+    vi.useFakeTimers({ now: T0 + 9 * HOUR_MS, toFake: ['Date'] });
+    const first = await app.api.put('/api/days/2026-09-01/offer');
+    expect([first.status, first.body]).toEqual([200, { offerAnsweredAt: T0 + 9 * HOUR_MS }]);
+    // Another device answering later changes nothing.
+    vi.setSystemTime(T0 + 10 * HOUR_MS);
+    expect((await app.api.put('/api/days/2026-09-01/offer')).body).toEqual({ offerAnsweredAt: T0 + 9 * HOUR_MS });
+    expect((await app.api.get('/api/days/2026-09-01')).body.offerAnsweredAt).toBe(T0 + 9 * HOUR_MS);
+    expect((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].offerAnsweredAt).toBe(T0 + 9 * HOUR_MS);
+  });
+});
+
 describe('/api/days/prune', () => {
   const seededDates = () => app.seeded!.days.map((d) => d.date);
   const storedDates = () => (app.db.prepare(`SELECT date FROM days ORDER BY date`).all() as { date: string }[]).map((d) => d.date);
@@ -352,6 +366,7 @@ describe('days are scoped to the signed-in user', () => {
     expect((await b.put(`/api/days/${date}/target`, { workMinutes: 240 })).status).toBe(200);
     const until = Date.parse(date) + 12 * HOUR_MS;
     expect((await b.put(`/api/days/${date}/snooze`, { alarm: 'lunchBy', until })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/offer`)).status).toBe(200);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
     const bDay = (await b.get(`/api/days/${date}`)).body;
     expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
@@ -359,6 +374,7 @@ describe('days are scoped to the signed-in user', () => {
     expect(bDay.retroNote).toBe('b');
     expect(bDay.workMinutes).toBe(240);
     expect(bDay.snoozedUntil).toEqual({ lunchBy: until });
+    expect(bDay.offerAnsweredAt).toEqual(expect.any(Number));
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
     // B naming the uid of a task of A's renames, ticks and removes B's own task of that uid,
     // whose sessions are B's: A's task, its rows and its time are as they were.
@@ -398,6 +414,7 @@ const writes = (day: string): [method: 'put' | 'post', path: string, body: unkno
   ['put', `${day}/snooze`, { alarm: 'lunchBy', until: Date.parse(day.slice(-10)) + 12 * HOUR_MS }],
   ['put', `${day}/target`, { workMinutes: 240 }],
   ['put', `${day}/retro`, { note: 'x' }],
+  ['put', `${day}/offer`, {}],
   ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
   ['post', `${day}/breaks`, { plannedSeconds: 300 }],
 ];

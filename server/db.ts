@@ -186,6 +186,8 @@ export const MIGRATIONS: Migration[] = [
   `,
   // Each alarm's snooze end on the day, as JSON of alarm id to epoch ms; '{}' is none.
   `ALTER TABLE days ADD COLUMN snoozed_until TEXT NOT NULL DEFAULT '{}';`,
+  // When the day's morning offer was first answered, from any device; null while unanswered.
+  `ALTER TABLE days ADD COLUMN offer_answered_at INTEGER;`,
 ];
 
 export function openDatabase(dbPath: string): DB {

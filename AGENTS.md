@@ -172,9 +172,10 @@ sheet offers them on a weekday (`--today` a weekday if needed); today's seeded o
 "Still Open From …" and "Up Next", so for the three groups take those rows off today's list and
 reload: × on today's sheet (Off This Day where it asks), or, since today lists no routine,
 `curl -X PUT localhost:3000/api/days/<today>/priorities -H 'content-type: application/json' -d '{"priorities":[]}'`.
-A reseed leaves this device's answers to the offer, so if it was answered today, first run
-`localStorage.removeItem('focus:recurring-answered'); localStorage.removeItem('focus:left-open-dismissed')`
-in the page. The carried task stays on the last weekday's list, open (the board shows it in Next
+Today's answer to the offer is stored on the day (`offerAnsweredAt`), so a reseed, which deletes
+the day, offers again; to reset it without one, run
+`sqlite3 data/focus.db "UPDATE days SET offer_answered_at = NULL WHERE date = '<today>'"` and
+reload. The carried task stays on the last weekday's list, open (the board shows it in Next
 as left open), so "Still Open From …" offers it, and "Up Next" offers "Follow up on the Acme SLA"
 (add cards with Next's + on the board for more).
 
@@ -447,8 +448,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   that save (below); and a timer start whose uid is a promise awaits it first inside its job (a new
   name typed on the timer card hands it the new row's save, a board item's Start its pull), so it
   names the task once today's list holds it. Done's tick goes the other way, on the day store's list
-  sends once its finish on the timer's queue has answered. `useSettings` sends its PUTs and resets
-  one at a time.
+  sends once its finish on the timer's queue has answered. Add to Today's offer stamp goes the same
+  way: on the day's `day:<date>` queue once the list save that carried its rows has answered (the
+  card waits on `sent.current`), so a refused list leaves the day unanswered. `useSettings` sends
+  its PUTs and resets one at a time.
   The board (`useBoard`) sends each write as one job on its own queue (`useBoard.tsx` says what
   each waits for, in what order, and why): a job that changes today's list (a pull, a row typed in
   In Progress's box, a tick, a rename, category or note of today's row, Remove From Today) goes
@@ -713,8 +716,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Today's sheet offers what the last planned day left open, the top of Next and the recurring
   priorities due** (`client/src/lib/recurring.ts`, `components/TodayOffer.tsx`), in one morning
   notice on Top Priorities, worked out on the client; the docs of `TodayOffer`, `useLeftOpen`,
-  `offeredLeftovers`, `topOfNext`, `dueRecurring`, `acceptOffer` and `useRecurringAnswered` say what
-  each group shows, ticks, adds and records. "Still Open From …" (the leftovers: `leftOpen`'s rows,
+  `offeredLeftovers`, `topOfNext`, `dueRecurring` and `acceptOffer` say what each group shows,
+  ticks and adds. "Still Open From …" (the leftovers: `leftOpen`'s rows,
   over the same `LOOKBACK_DAYS` the board's left-open group reads) shows while no one-off row has
   text, and nothing is offered until the board has loaded (a failed read offers nothing until a
   later one lands; the board's refresh asks again every minute, when the tab comes back and on a
@@ -728,10 +731,14 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   already sent counts at once. Each group is a `role="group"` named by its heading, and the line
   that says more routines are ticked than `recurringPerDay` (`TODAY_OFFER.over`) is a live region
   always there under their group. Add runs `acceptOffer` through the card's draft, so what is typed
-  goes out in the same save, and a task from Up Next keeps its lane, as a pull does. Once Add's save
-  goes through, and at once for Not Today (Start Fresh while no routine shows), the notice records
-  every routine shown, ticked or not (`useRecurringAnswered`), and leftovers or Up Next shown hold
-  Start Fresh (`leftOpenDismissed`), so removing a row the notice added brings nothing back.
+  goes out in the same save, and a task from Up Next keeps its lane, as a pull does. Any answer
+  stamps the day (`Day.offerAnsweredAt`, through `setOfferAnswered` and `PUT /days/:date/offer`,
+  which keeps the first stamp): at once for Not Today and Start Fresh (its name while no routine
+  shows), and once Add's save goes through. A stamped day offers nothing on any device, so removing
+  a row the notice added brings nothing back, and no route or control clears a stamp (a reseed or
+  a prune deletes the day, and the stamp with it). The notice waits for the leftovers' read
+  (answered, failed or never made: `useLeftOpen`'s `settled`) as well as the board's, so a stamp
+  covers what was shown.
 - **In Progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to

@@ -71,14 +71,10 @@ export const USER_KEYS = {
    * As a prefix it also takes the `focus:alarms:<date>` keys an earlier version kept.
    */
   alarms: 'focus:alarms',
-  /** The date Start Fresh was pressed: another user's would hide this one's "Still Open From …" and "Up Next". */
-  leftOpenDismissed: 'focus:left-open-dismissed',
   /** The start of the break whose "Break's Over" rang: another user's would silence this one's. */
   breakOver: 'focus:break-over',
   /** The category the board columns' boxes last picked ('' for none): another user's uid. */
   captureCategory: 'focus:capture-category',
-  /** The recurring priorities the morning offer was answered for today (`useRecurringAnswered`): another user's uids. */
-  recurringAnswered: 'focus:recurring-answered',
 } as const;
 
 /**

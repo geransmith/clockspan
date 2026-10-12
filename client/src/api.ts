@@ -9,6 +9,7 @@ import type {
   Day,
   ErrorResponse,
   LogoutResponse,
+  OfferResponse,
   OkResponse,
   OpenLane,
   OvertimeResponse,
@@ -213,6 +214,7 @@ export const putOvertime = (date: string, approved: boolean) => request<Overtime
 export const putSnooze = (date: string, alarm: AlarmId, until: number) => request<SnoozeResponse>('PUT', `/api/days/${date}/snooze`, { alarm, until });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
+export const putOffer = (date: string) => request<OfferResponse>('PUT', `/api/days/${date}/offer`);
 export const getRange = (from: string, to: string) => request<RangeResponse>('GET', `/api/days/range?from=${from}&to=${to}`);
 export const getPruneInfo = (before: string) => request<PruneInfo>('GET', `/api/days/prune?before=${before}`);
 export const pruneDays = (before: string) => request<PruneResult>('POST', '/api/days/prune', { before });

@@ -19,14 +19,13 @@ export interface MorningOffer {
   leftovers: Leftovers | null;
   /** The top of Next as seeds (`topOfNext`); none until the leftovers' read and the board's have answered. */
   upNext: PrioritySeed[];
-  /** The recurring priorities due today and not answered on this device yet, in the order they were made (`dueRecurring`); none before the board's first read. */
+  /** The recurring priorities due today, in the order they were made (`dueRecurring`); none before the board's first read. */
   recurring: Recurring[];
   /**
-   * Records what the notice showed once Add to Today, Not Today or Start Fresh is pressed: the
-   * routines shown, ticked or not, are answered for today on this device, and leftovers or Up
-   * next shown hold Start Fresh for the day.
+   * Stamps the day answered once Add to Today's save is in, or at once for Not Today or Start
+   * Fresh: the day then offers nothing, on every device, whatever the notice showed.
    */
-  answer: (shownRecurring: string[], oneOffsShown: boolean) => void;
+  answer: () => void;
 }
 
 interface Props {
