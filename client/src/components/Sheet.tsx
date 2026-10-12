@@ -13,6 +13,7 @@ import { dayName } from '../lib/format';
 import { unlessGone } from '../lib/apiError';
 import { offeredLeftovers, saved, topOfNext } from '../lib/board';
 import { CARD_TITLES, moveCard, patchCard, SPLIT_QUERY, splitColumns } from '../lib/layout';
+import { dayMeetings, lunchClash } from '../lib/meetings';
 import { isOneOff, patchRow } from '../lib/priorities';
 import { dueRecurring } from '../lib/recurring';
 import { CARD_SIDES } from '../../../shared/settings.js';
@@ -177,6 +178,11 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
             orderNotice={orderNotice}
             typing={typing}
             onTyping={setTyping}
+            lunchClash={
+              isToday && tc.lunchStatus === 'upcoming'
+                ? lunchClash(tc.lunchBy, dayMeetings(date, day.meetings, settings.meetings), settings.lunchMinutes)
+                : null
+            }
           />
         );
       case 'priorities':

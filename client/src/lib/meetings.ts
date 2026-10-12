@@ -98,3 +98,20 @@ export function meetingAt(rows: readonly MeetingRow[], now: number): MeetingRow 
 export function nextMeeting(rows: readonly MeetingRow[], now: number): MeetingRow | null {
   return rows.find((r) => !r.skipped && r.meeting.startsAt > now) ?? null;
 }
+
+/** A meeting on at the lunch deadline, and the latest Lunch out that is back before it starts. */
+export interface LunchClash {
+  meeting: MeetingRow['meeting'];
+  by: number;
+}
+
+/**
+ * The first meeting on at the lunch deadline (`lunchBy`), skipped ones aside, with `by`, the latest
+ * Lunch out a lunch of `lunchMinutes` comes back from before it starts; null with none, or with no
+ * deadline (no lunch needed, or meal periods off).
+ */
+export function lunchClash(lunchBy: number | null, rows: readonly MeetingRow[], lunchMinutes: number): LunchClash | null {
+  if (lunchBy == null) return null;
+  const row = rows.find((r) => !r.skipped && r.meeting.startsAt <= lunchBy && lunchBy < r.meeting.endsAt);
+  return row ? { meeting: row.meeting, by: row.meeting.startsAt - lunchMinutes * MINUTE_MS } : null;
+}

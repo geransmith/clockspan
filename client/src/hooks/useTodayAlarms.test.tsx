@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { alert, dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
-import { MINUTE_MS } from '../../../shared/dates.js';
+import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import {
   answered,
   deferred,
@@ -245,6 +245,21 @@ describe('useTodayAlarms', () => {
       await judged();
       expect(tags()).not.toContain('alarm:noBreak');
     });
+  });
+
+  it('warns to take lunch before a meeting that covers the deadline, when lunch must start to be back for it', async () => {
+    // Clocked in at 5:00, so lunch is due by 10:00; the call runs 9:30-10:30 and lunch is 30 min, so 9:00 is the time.
+    const day = makeDay(TODAY, {
+      punches: punchesAt(T0 - 4 * HOUR_MS),
+      meetings: { call0000: { title: 'Call', startsAt: T0 + 30 * MINUTE_MS, endsAt: T0 + 90 * MINUTE_MS } },
+    });
+    render(makeSettings(), day);
+    await judged();
+    const lunch = alerted().find((a) => a.tag === 'alarm:lunchBy');
+    expect([lunch?.title, lunch?.body]).toEqual([
+      'Take Lunch Now',
+      'Call runs 9:30 AM–10:30 AM, over your 10:00 AM lunch deadline. Lunch out now to be back for it.',
+    ]);
   });
 
   describe('missed clock-in', () => {

@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import type { WeeklyMeeting } from '../types';
-import { changeWeekly, currentPart, dayMeetings, defaultUntil, meetingAt, minuteOfDay, nextMeeting, occurrence, renameWeekly, stopWeekly } from './meetings';
+import {
+  changeWeekly,
+  currentPart,
+  dayMeetings,
+  defaultUntil,
+  lunchClash,
+  meetingAt,
+  minuteOfDay,
+  nextMeeting,
+  occurrence,
+  renameWeekly,
+  stopWeekly,
+} from './meetings';
 
 // 2026-10-12 is a Monday.
 const MON = '2026-10-12';
@@ -132,5 +144,15 @@ describe('nextMeeting', () => {
     expect(nextMeeting(rows, at(MON, 8))?.uid).toBe('a');
     expect(nextMeeting(rows, at(MON, 9))?.uid).toBe('c');
     expect(nextMeeting(rows, at(MON, 11))).toBeNull();
+  });
+});
+
+describe('lunchClash', () => {
+  it('finds the meeting on at the lunch deadline and when lunch must start to be back for it', () => {
+    const rows = dayMeetings(MON, { a: call(12), b: call(13), stand000: null }, [{ ...STANDUP, start: 12 * 60 + 30, end: 13 * 60 + 30 }]);
+    expect(lunchClash(at(MON, 12, 30), rows, 30)).toEqual({ meeting: call(12), by: at(MON, 11, 30) });
+    expect(lunchClash(at(MON, 13), rows, 30)).toEqual({ meeting: call(13), by: at(MON, 12, 30) });
+    expect(lunchClash(at(MON, 14), rows, 30)).toBeNull();
+    expect(lunchClash(null, rows, 30)).toBeNull();
   });
 });
