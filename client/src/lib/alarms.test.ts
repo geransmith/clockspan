@@ -176,6 +176,15 @@ describe('alarmTargets', () => {
     expect(armed(alarmTargets(tangled, s, { ...day, overtimeApproved: true }))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
   });
 
+  it('arms the end of the day with Lunch out and the Clock out typed ahead, which wait for the clock', () => {
+    expect(armed(alarmTargets(tc(IN + 2 * HOUR_MS, IN, IN + 4 * HOUR_MS, null, IN + 9 * HOUR_MS), s, day))).toEqual({
+      lunchBy: true,
+      clockOut: true,
+      secondMeal: false,
+      retro: true,
+    });
+  });
+
   it('keeps lunch armed with the punches out of order, since its deadline comes from the clock-in', () => {
     // Mid-morning, no lunch yet, and a Clock out typed as 2:00 AM: the typo must not mute the meal period.
     const typo = tc(IN + 3 * HOUR_MS, IN, null, null, IN - 6 * HOUR_MS);

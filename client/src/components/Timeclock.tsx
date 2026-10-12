@@ -189,8 +189,9 @@ export function Timeclock({
   const clockOutPos = clockOutPosition(punches);
 
   const lunchRows = lunchRowsShown(punches, settings);
-  // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
-  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings)) : null;
+  // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap,
+  // none while an appointment typed ahead would make it an early Clock out.
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings), now) : null;
   const name = (position: number) => punchLabel(punches, position, pairs);
   const row = (punch: Punch, label: string) => (
     <PunchRow

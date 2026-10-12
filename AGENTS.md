@@ -453,8 +453,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and **the last row is always the Clock out** (an odd position ≥ 3; `normalizePunches` enforces
   it). Kind is parity (`kindForPosition`, `shared/punches.ts`). The math evaluates *set* punches
   chronologically; `extraPairs()` only decides where the card *shows* a pair. Today a time typed
-  ahead of now counts once the clock reaches it (its order is checked at once); a past day counts
-  every time it has. Today ends only at the Clock out, when it is the latest punch reached, with the
+  ahead of now counts once the clock reaches it (its order is checked at once, except that an Out
+  typed ahead right after a Lunch out or an extra pair's Out whose own In is still empty waits for
+  the clock to reach it); a past day counts every time it has. Today ends only at the Clock out,
+  when it is the latest punch reached, with the
   target met or not; an extra pair's Out is a break, the second meal included, and never ends it. A
   past day ends once it is off the clock. "Add Extra Out / In" appends two rows, so the old Clock
   out becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
