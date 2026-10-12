@@ -86,7 +86,9 @@ what `npm run seed` writes.
   Meeting puts the focus in Title, a start fills a 30-minute end, and Add brings the focus back to
   Add Meeting; no sideways scroll. Add one with Repeat days pressed: its row has a days button
   ("Mon–Fri") that opens the days, the usual time and Stop Repeating under it; × leaves it listed,
-  muted, "skipped", with Put Back (which takes the focus).
+  muted, "skipped", with Put Back (which takes the focus). On the timer card, Break and Meeting sit
+  side by side; Meeting opens Until with Start Meeting focused, and Start Meeting shows "In … until …"
+  with a countdown and End Meeting, at 1280 and the 375 preset.
 - **Priorities or the timer card**: tick one row and press Add Priority (the notice lists the
   ticked row); in the timer's label box, the list of open rows on a press and on Tab (not on the
   focus Finish hands back), under the box at its width and over the card, whose height stays put as

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { atTime, HOUR_MS } from '../../../shared/dates.js';
+import { atTime, HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import type { WeeklyMeeting } from '../types';
-import { changeWeekly, currentPart, dayMeetings, minuteOfDay, occurrence, renameWeekly, stopWeekly } from './meetings';
+import { changeWeekly, currentPart, dayMeetings, defaultUntil, meetingAt, minuteOfDay, occurrence, renameWeekly, stopWeekly } from './meetings';
 
 // 2026-10-12 is a Monday.
 const MON = '2026-10-12';
@@ -104,5 +104,24 @@ describe('changeWeekly, stopWeekly and renameWeekly', () => {
       { ...STANDUP, uid: 'other000' },
     ];
     expect(renameWeekly(parts, 'stand000', 'Daily').map((w) => w.title)).toEqual(['Daily', 'Daily', 'Standup']);
+  });
+});
+
+describe('defaultUntil', () => {
+  it('is the first :00 or :30 at least 10 minutes away', () => {
+    expect(defaultUntil(at(MON, 9))).toBe(at(MON, 9, 30));
+    expect(defaultUntil(at(MON, 9, 20))).toBe(at(MON, 9, 30));
+    expect(defaultUntil(at(MON, 9, 20) + 1)).toBe(at(MON, 10));
+    expect(defaultUntil(at(MON, 9, 50))).toBe(at(MON, 10));
+    expect(defaultUntil(at(MON, 9, 45))).toBe(at(MON, 10));
+  });
+});
+
+describe('meetingAt', () => {
+  it('finds the meeting on at a time, the first by start, leaving out a skipped one', () => {
+    const rows = dayMeetings(MON, { a: call(9), b: call(9, 'Second'), stand000: null }, [{ ...STANDUP, start: 540, end: 600 }]);
+    expect(meetingAt(rows, at(MON, 9, 30))?.uid).toBe('a');
+    expect(meetingAt(rows, at(MON, 10))).toBeNull();
+    expect(meetingAt(rows, at(MON, 9) - MINUTE_MS)).toBeNull();
   });
 });

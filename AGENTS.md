@@ -430,7 +430,13 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Stop Repeating (it asks), which change it from today on: the running part ends yesterday and
   another carries on under the same uid (`changeWeekly`, `stopWeekly`), so the days before keep it as
   it was. A press that takes its row away hands the focus to the next row's ×. Reset All Settings
-  clears them, and two devices editing the list at once keep one edit, as with the other lists.
+  clears them, and two devices editing the list at once keep one edit, as with the other lists. The
+  timer card's Meeting (`FocusTimer`, beside Break, today only and never while a timer runs) opens an
+  Until row (`defaultUntil`: the first :00 or :30 ten minutes away; after now and within
+  `MEETING_UNTIL_MAX_MINUTES`), and Start Meeting adds a one-off from the minute on the one-second
+  clock under the label box's text and ends a running break. While a meeting is on (`meetingAt`, any
+  kind) the card shows it with End Meeting, which ends it now; one under a minute is cleared (a
+  weekly one skipped). The focus moves as a break's does.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`

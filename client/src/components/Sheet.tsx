@@ -210,7 +210,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
           />
         );
       case 'timer':
-        return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} pick={pick} />;
+        return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} meetings={day.meetings} pick={pick} />;
       case 'meetings':
         return (
           <Meetings

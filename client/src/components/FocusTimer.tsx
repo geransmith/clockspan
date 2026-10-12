@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type ReactNode, type Ref, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useBreak } from '../hooks/useBreak';
+import { useClock } from '../hooks/useClock';
 import { useDayStore } from '../hooks/useDay';
 import { useSettings } from '../hooks/useSettings';
 import { useShortcut } from '../hooks/useShortcuts';
@@ -7,32 +8,41 @@ import { useTimeFormat } from '../hooks/useTimeFormat';
 import { useSubmit } from '../hooks/useSubmit';
 import { useTimer } from '../hooks/useTimer';
 import type { CategoryPick } from '../lib/board';
-import { BREAK, SAVE_FAILED } from '../lib/copy';
-import { formatCountdown, formatDuration } from '../lib/format';
-import { hasRoom, isTaskRow } from '../lib/priorities';
+import { BREAK, MEETING, SAVE_FAILED } from '../lib/copy';
+import { floorToMinute, formatCountdown, formatDuration } from '../lib/format';
+import { dayMeetings, defaultUntil, MEETING_UNTIL_MAX_MINUTES, meetingAt, type MeetingRow } from '../lib/meetings';
+import { hasRoom, isTaskRow, newUid } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
-import { sameText } from '../../../shared/text.js';
-import type { Priority, Session } from '../types';
+import { MINUTE_MS } from '../../../shared/dates.js';
+import { meetingTitle, sameText } from '../../../shared/text.js';
+import type { Day, Priority, Session } from '../types';
 import { CategoryChip, placeList } from './CategoryChip';
 import { SessionLabel } from './SessionLabel';
 import { TimerControls } from './TimerControls';
 import { TimerLengths } from './TimerLengths';
+import { TimeField } from './TimeField';
 import { ErrorLine } from './ErrorLine';
 
 interface Props {
   date: string;
   isToday: boolean;
   priorities: Priority[];
+  meetings: Day['meetings'];
   /** The category chip's data: a new name typed in the label box offers a category for its row. Null (before the board's first read) shows none. */
   pick: CategoryPick | null;
 }
 
-export function FocusTimer({ date, isToday, priorities, pick }: Props) {
+export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props) {
   const timer = useTimer();
   const breakTimer = useBreak();
-  const { addPriority } = useDayStore();
+  const { addPriority, setMeeting, clearMeeting } = useDayStore();
   const { settings } = useSettings();
-  const { formatTime } = useTimeFormat();
+  const { hour12, formatTime } = useTimeFormat();
+  const now = useClock();
+  // The meeting on now, and Until's time while Meeting's row is open.
+  const inMeeting = isToday ? meetingAt(dayMeetings(date, meetings, settings.meetings), now) : null;
+  const [until, setUntil] = useState<number | null>(null);
+  const untilErrorId = useId();
   const [label, setLabel] = useState('');
   // The row picked from the label box's list, so a pick between two rows of one name starts on the one picked.
   const [linked, setLinked] = useState<string | null>(null);
@@ -74,6 +84,26 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
     run(() => breakTimer.start(breakTimer.next.minutes));
   };
   const breakKey = useShortcut('rest', !timer.running && isToday && breakTimer.endsAt == null && !held ? pressBreak : null);
+
+  // A call taken now, until the time picked, under what the label box holds; a break on ends, since the
+  // call is work. Read off the one-second clock, so the line shows in the same render.
+  const startMeeting = (to: number) => {
+    passFocus();
+    if (breakTimer.endsAt != null) breakTimer.end();
+    void setMeeting(date, newUid(), { title: meetingTitle(label), startsAt: floorToMinute(now), endsAt: to });
+    setLabel('');
+    setLinked(null);
+    setCategory(null);
+    setUntil(null);
+  };
+  // Ended now; one under a minute was a slip, and goes (a weekly one is skipped for the day).
+  const endMeeting = ({ uid, meeting, weekly }: MeetingRow) => {
+    passFocus();
+    if (now - meeting.startsAt >= MINUTE_MS) void setMeeting(date, uid, { ...meeting, title: weekly ? null : meeting.title, endsAt: now });
+    else if (weekly) void setMeeting(date, uid, null);
+    else void clearMeeting(date, uid);
+  };
+  const untilError = until == null ? null : until <= now ? MEETING.notAfterNow : until - now > MEETING_UNTIL_MAX_MINUTES * MINUTE_MS ? MEETING.tooFar : null;
 
   if (timer.running) return <Running session={timer.running} takeFocus={takeFocus} onLeave={passFocus} />;
 
@@ -142,11 +172,69 @@ export function FocusTimer({ date, isToday, priorities, pick }: Props) {
           </button>
         </PassFocusOnLeave>
       )}
+      {inMeeting && (
+        <PassFocusOnLeave className="timer-break" onLeave={passFocus}>
+          <span className="timer-break-text">
+            <span>{MEETING.running(inMeeting.meeting.title, formatTime(inMeeting.meeting.endsAt))}</span>
+            <strong role="timer">{formatCountdown(Math.ceil((inMeeting.meeting.endsAt - now) / 1000))}</strong>
+          </span>
+          <button className="btn btn-ghost" onClick={() => endMeeting(inMeeting)} ref={takeFocus}>
+            {MEETING.end}
+          </button>
+        </PassFocusOnLeave>
+      )}
       <TimerLengths onStart={start} disabled={!isToday || held} />
-      {isToday && breakTimer.endsAt == null && (
-        <button className="btn btn-ghost timer-break-start" onClick={pressBreak} disabled={held} aria-keyshortcuts={breakKey} ref={takeFocus}>
-          {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
-        </button>
+      {isToday && (
+        <div className="timer-actions">
+          {breakTimer.endsAt == null && (
+            <button className="btn btn-ghost" onClick={pressBreak} disabled={held} aria-keyshortcuts={breakKey} ref={takeFocus}>
+              {BREAK.start(breakTimer.next.minutes, breakTimer.next.long)}
+            </button>
+          )}
+          {!inMeeting && until == null && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                passFocus();
+                setUntil(defaultUntil(now));
+              }}
+              ref={takeFocus}
+            >
+              {MEETING.start}
+            </button>
+          )}
+        </div>
+      )}
+      {isToday && until != null && (
+        <div className="timer-until" role="group" aria-label="Start a meeting">
+          <span className="muted small">Until</span>
+          <TimeField
+            value={until}
+            date={date}
+            hour12={hour12}
+            anchorAt={now}
+            label="Until"
+            errorId={untilError ? untilErrorId : undefined}
+            onCommit={setUntil}
+          />
+          <button className="btn btn-primary" onClick={() => startMeeting(until)} disabled={untilError != null} ref={takeFocus}>
+            {MEETING.begin}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              passFocus();
+              setUntil(null);
+            }}
+          >
+            Cancel
+          </button>
+          {untilError && (
+            <p id={untilErrorId} className="muted small timer-until-error">
+              {untilError}
+            </p>
+          )}
+        </div>
       )}
       {!isToday && <p className="muted center">Timers can only be started on today's sheet.</p>}
       {/* A new row's failed save is the "Change Not Saved" banner's to say; the list full or not loaded, and the start's own errors, show here. */}
