@@ -2,8 +2,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { dismissByTag, unlockAudio } from '../lib/alerts';
-import { answered, makeSettings, SettingsAndDays, settle } from '../test/hooks';
+import { dismissByTag, offerNotifications, unlockAudio } from '../lib/alerts';
+import { answered, deferredAnswer, makeSettings, SettingsAndDays, settle } from '../test/hooks';
+import type { Settings } from '../types';
 import { TimerLengths } from './TimerLengths';
 
 vi.mock('../api');
@@ -33,12 +34,16 @@ describe('TimerLengths', () => {
     expect(lengths()).toEqual(['25min', '50min']);
   });
 
-  it('unlocks the sound and takes the break banners down in the tap, before the start', async () => {
+  it('unlocks the sound, asks for notifications and takes the break banners down in the tap, before the start', async () => {
     const onStart = await renderLengths([25]);
     fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
     expect(onStart).toHaveBeenCalledExactlyOnceWith(25);
     const started = onStart.mock.invocationCallOrder[0]!;
-    expect(vi.mocked(unlockAudio).mock.invocationCallOrder[0]).toBeLessThan(started);
+    const unlocked = vi.mocked(unlockAudio).mock.invocationCallOrder[0]!;
+    expect(unlocked).toBeLessThan(started);
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
+    expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeGreaterThan(unlocked);
+    expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeLessThan(started);
     expect(dismissByTag).toHaveBeenCalledExactlyOnceWith('break');
     expect(vi.mocked(dismissByTag).mock.invocationCallOrder[0]).toBeLessThan(started);
   });
@@ -48,5 +53,20 @@ describe('TimerLengths', () => {
     fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
     expect(onStart).not.toHaveBeenCalled();
     expect(unlockAudio).not.toHaveBeenCalled();
+    expect(offerNotifications).not.toHaveBeenCalled();
+  });
+
+  it('asks for no notifications before the settings have loaded, since the switch may be off', async () => {
+    const onStart = vi.fn();
+    vi.mocked(api.getSettings).mockReturnValue(deferredAnswer<Settings>().promise);
+    render(
+      <SettingsAndDays>
+        <TimerLengths onStart={onStart} disabled={false} />
+      </SettingsAndDays>,
+    );
+    await settle();
+    fireEvent.click(screen.getAllByRole('button')[0]!);
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onStart).toHaveBeenCalledOnce();
   });
 });

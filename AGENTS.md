@@ -299,9 +299,15 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **All user-facing alerts go through `client/src/lib/alerts.ts`** (`alert()`, `playSound()`,
   banners). Never call `new Notification(...)` or `showNotification()` (its fallback where the
   constructor is refused, Chrome on Android), create an `AudioContext` or fetch a clip anywhere
-  else. `unlockAudio()` must be called from a user gesture (the timer's length buttons,
-  `TimerLengths`, on the timer card and a board card's dialog, `useBreak`'s `start`, every
-  punch commit, the timer's Done and the shortcut listener, for a timer key, do this) for iOS.
+  else. `unlockAudio()` must be called from a user gesture for iOS: the capture-phase `pointerup`
+  and `keydown` listeners in `main.tsx` call it on every tap and key, since iOS suspends audio
+  again in the background, and the per-control calls stay (the timer's length buttons,
+  `TimerLengths`, on the timer card and a board card's dialog, `useBreak`'s `start`, every punch
+  commit, the timer's Done and the shortcut listener, for a timer key), where their tests prove
+  the unlock inside the tap. `offerNotifications` asks for notification permission once per device
+  (`focus:notifications-asked`, not a `USER_KEYS` entry: the permission is the browser's), inside
+  the tap and once the settings have loaded, from today's Clock in and `TimerLengths`' tap; the
+  only other ask is Allow in Settings → Alarms, the way back after a dismissal.
   What plays is `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and `none` is the per-event off. A
   celebration (day complete and work week reached in `Timeclock.tsx`, a priority ticked in
@@ -861,10 +867,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   acts where its button wouldn't, and R holds the start buttons as a tap on Break does. S, B and H
   put the focus on their header button first, where a click leaves it, since the control it was on
   may go with the page. `useShortcutListener`, mounted once by `Shortcuts` beside `FinishChoice` in
-  `App.tsx`, is the one keydown listener (nothing else in the app listens for keys on the window or
-  the document), and `shortcutFor` is its guard: their docs say which keys they leave alone and
-  why. The list is a static dialog in `Shortcuts.tsx`, its labels beside it, not a lazy chunk. The
-  setting is on by default and turns every key off (WCAG 2.1.4).
+  `App.tsx`, is the one keydown listener that acts on a key (the only other on the window or the
+  document is `main.tsx`'s audio unlock, which acts on none), and `shortcutFor` is its guard: their
+  docs say which keys they leave alone and why. The list is a static dialog in `Shortcuts.tsx`, its
+  labels beside it, not a lazy chunk. The setting is on by default and turns every key off
+  (WCAG 2.1.4).
 - **History, the board, the settings dialog and drag and drop are lazy chunks** (`lazy()` in
   `App.tsx` for `History`, `Board` and `SettingsDialog`, in `Sheet.tsx` for `SortableCards`;
   `SortableCards` and `components/board/` hold every `@dnd-kit` import). A static import of one

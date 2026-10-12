@@ -6,6 +6,7 @@
 import type { ClipId, SoundId, SynthId } from '../types';
 import { SAVE_FAILED } from './copy';
 import { clipUrl } from './sounds';
+import { readStored, writeStored } from './storage';
 
 type Tone = 'info' | 'warn' | 'danger' | 'success';
 
@@ -32,11 +33,15 @@ export interface BannerAction {
 // ----- audio -----
 let ctx: AudioContext | null = null;
 
-/** Must be called from a user gesture at least once so iOS/Safari allow playback later. */
+/**
+ * Makes the audio context and resumes it, which iOS and Safari allow only inside a user gesture.
+ * `main.tsx` runs it on every tap and key, since iOS suspends the context again in the background
+ * and marks it 'interrupted' after a lock or a call; the controls' own taps call it too.
+ */
 export function unlockAudio(): void {
   try {
     ctx ??= new AudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state !== 'running') void ctx.resume();
   } catch {
     ctx = null;
   }
@@ -142,7 +147,9 @@ function notificationsSupported(): boolean {
   return typeof Notification !== 'undefined';
 }
 
-export function notificationPermission(): NotificationPermission | 'unsupported' {
+/** 'insecure' comes first: over plain http Chrome answers 'denied', and other browsers have no `Notification`. */
+export function notificationPermission(): NotificationPermission | 'unsupported' | 'insecure' {
+  if (!window.isSecureContext) return 'insecure';
   return notificationsSupported() ? Notification.permission : 'unsupported';
 }
 
@@ -153,6 +160,21 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   } catch {
     return Notification.permission;
   }
+}
+
+/** Set once this browser was asked; not a `USER_KEYS` entry, since the permission is the browser's, whoever signs in. */
+const NOTIFICATIONS_ASKED = 'focus:notifications-asked';
+
+/**
+ * Asks the browser for notification permission once per device, from inside a tap (Safari takes
+ * the request only there, so nothing here waits before it): `enabled` is the switch once the
+ * settings have loaded. A dismissed prompt isn't asked again; Allow in Settings → Alarms is the
+ * way back. A call outside a gesture writes nothing, so the next tap asks.
+ */
+export function offerNotifications(enabled: boolean): void {
+  if (!enabled || notificationPermission() !== 'default' || navigator.userActivation?.isActive === false || readStored(NOTIFICATIONS_ASKED) !== null) return;
+  writeStored(NOTIFICATIONS_ASKED, '1');
+  void requestNotificationPermission();
 }
 
 function notify(title: string, body: string | undefined, tag: string): void {
