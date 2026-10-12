@@ -1,5 +1,6 @@
-import type { AlarmId, AlarmSettings, CardId, Day, Settings } from '../types';
+import type { AlarmId, AlarmSettings, Break, CardId, Day, Settings } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
+import { lastBreakEnd, runningBreak } from './breaks';
 import { floorToMinute, formatMinutes, formatTime } from './format';
 import { secondMealApplies, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
@@ -13,17 +14,27 @@ export interface AlarmTarget {
 
 const cardShown = (layout: Settings['layout'], id: CardId) => layout.some((l) => l.id === id && l.visible);
 
-/** The day's own switches that disarm a target. */
+/** The break alarm rings this long after the last rest. */
+export const NO_BREAK_MINUTES = 90;
+/** The break alarm holds from this long before an armed lunch or clock-out deadline. */
+export const BREAK_HOLD_MINUTES = 30;
+
+/** What of the day besides its punches arms a target: its own switches, its breaks and a running session. */
 export interface TargetDay {
   /** Silences the clock-out target only. */
   overtimeApproved: boolean;
   /** Today's retrospective has been marked reviewed. */
   retroDone: boolean;
+  /** Today's breaks, by start. */
+  breaks: readonly Break[];
+  /** A session runs on today's sheet, paused or due included. */
+  timerRunning: boolean;
 }
 
 /**
  * Today's targets and when each is armed. Lunch is armed until it is taken or the day is
- * done. Clock-out is only a fixed instant while working (on a break it drifts later), and
+ * done. The end of lunch is armed while at lunch (`lunchEndsAt`), so a Lunch in never punched
+ * still rings. Clock-out is only a fixed instant while working (on a break it drifts later), and
  * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
  * periods are still required on an overtime day (California Labor Code §512), so lunch and
  * the second meal stay armed, and the planned end of the day is still the moment to look back.
@@ -35,20 +46,36 @@ export interface TargetDay {
  * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
  * banner's button and Mark Reviewed are on the card. A typed Clock out moves the end earlier, never
  * later, so a day running past the planned end still warns.
+ *
+ * The break alarm's target is `NO_BREAK_MINUTES` after the last rest: the later of the In punch the
+ * clock reached last and the end of the last break over by `now`. It moves only when a rest
+ * happens, never with the clock. It is armed while working with the punches in order and no break
+ * or session running, so a target passed during a timer rings once it is finished. It holds from
+ * `BREAK_HOLD_MINUTES` before an armed lunch or clock-out deadline (armed, whatever their own
+ * switches say) until lunch is taken, the day ends or overtime is approved.
  */
-export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
+export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay, now: number): AlarmTarget[] {
   const endFixed = !tc.outOfOrder && tc.state === 'working';
   const end = Math.min(tc.clockOutAt ?? 0, tc.typedClockOut ?? Infinity);
-  return [
+  const targets: AlarmTarget[] = [
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
       armed: (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
+    { id: 'lunchEnd', at: tc.lunchEndsAt ?? 0, armed: tc.lunchEndsAt != null },
     { id: 'clockOut', at: end, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
     { id: 'retro', at: end, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
   ];
+  const since = tc.workingSince;
+  const held = targets.some((t) => (t.id === 'lunchBy' || t.id === 'clockOut') && t.armed && now >= t.at - BREAK_HOLD_MINUTES * MINUTE_MS);
+  targets.push({
+    id: 'noBreak',
+    at: since == null ? 0 : Math.max(since, lastBreakEnd(day.breaks, now) ?? since) + NO_BREAK_MINUTES * MINUTE_MS,
+    armed: endFixed && !runningBreak(day.breaks, now) && !day.timerRunning && !held,
+  });
+  return targets;
 }
 
 /**
@@ -66,7 +93,7 @@ export function missedClockIn(
   const counts =
     settings.trackHours ||
     alarms.clockOut.enabled ||
-    (settings.mealRules && (alarms.lunchBy.enabled || alarms.secondMeal.enabled)) ||
+    (settings.mealRules && (alarms.lunchBy.enabled || alarms.lunchEnd.enabled || alarms.secondMeal.enabled)) ||
     (alarms.retro.enabled && cardShown(settings.layout, 'retro'));
   if (starts.length === 0 || day.punches.some((p) => p.at != null) || !cardShown(settings.layout, 'timeclock') || !counts) return null;
   return floorToMinute(Math.min(...starts));
@@ -145,7 +172,7 @@ export function dueEvents(
  * is shown, since a warning seen late (the phone was asleep) says the time actually left. Also the
  * Clock out typed ahead (`typedClockOut`), which the clock-out warning names when it is the target.
  */
-type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
+type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
   hour12: boolean;
   now: number;
@@ -167,9 +194,11 @@ export const ALARM_TAG = 'alarm:';
 /** Each alarm's kicker, its name; a new `AlarmId` without one is a type error. */
 const ALARM_NAMES: Record<AlarmId, string> = {
   lunchBy: 'Lunch alarm',
+  lunchEnd: 'Lunch end alarm',
   clockOut: 'Clock-out alarm',
   secondMeal: 'Second meal alarm',
   retro: 'Retrospective',
+  noBreak: 'Break alarm',
 };
 
 /**
@@ -233,6 +262,18 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         body: `Your lunch deadline was ${target}. Punch Lunch out as soon as you can.`,
         tone: 'danger',
       };
+    case 'lunchEnd': {
+      const lunch = `Lunch out at ${formatTime(e.target - ctx.lunchMinutes * MINUTE_MS, ctx.hour12)}; lunch is ${formatMinutes(ctx.lunchMinutes)}.`;
+      // Only a hand-made PUT gives it a lead: the editor has no Warn before row.
+      if (kind === 'lead') return { kicker, title: `Lunch Ends in ${left}`, body: lunch, tone: 'warn' };
+      if (kind === 'due') return { kicker, title: 'Lunch Is Over', body: lunch, tone: 'warn' };
+      return {
+        kicker,
+        title: `Lunch Ended ${formatMinutes(e.minutes)} Ago`,
+        body: 'Clock-out and retrospective alarms are off until Lunch in is punched.',
+        tone: 'warn',
+      };
+    }
     case 'secondMeal':
       if (kind === 'lead') {
         return {
@@ -277,5 +318,15 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         body: `Your day ended at ${target}. You're working past your ${day} target.`,
         tone: 'danger',
       };
+    case 'noBreak': {
+      // Counted to now, not to the event, so a banner raised late (a timer ran past the target) says the real time.
+      const since = e.target - NO_BREAK_MINUTES * MINUTE_MS;
+      return {
+        kicker,
+        title: `${formatMinutes(Math.floor((ctx.now - since) / MINUTE_MS))} Without a Break`,
+        body: `Working since ${formatTime(since, ctx.hour12)}.`,
+        tone: 'warn',
+      };
+    }
   }
 }

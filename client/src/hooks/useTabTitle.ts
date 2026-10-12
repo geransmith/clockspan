@@ -10,14 +10,14 @@ import { useTimeFormat } from './useTimeFormat';
 import { useTimer } from './useTimer';
 
 /**
- * Writes the tab's title (`tabTitle`): the running session, a running break, or today's next
- * deadline. Called in `Shell`, inside every provider, since the timer's provider sits outside the
- * break's and can't read a running break. Today's timeclock is worked out here rather than taken
- * from `useTodayAlarms`, whose `tc` is null for 3 s after every punch and while a come-back refresh
- * is out, so the title would fall back to "Clockspan" then; the store's shown copy has a punch from
- * the tap on. Today is read, never loaded: `useTodayAlarms` loads and refreshes it. The deadlines
- * wait for the settings, as the alarms do, since the defaults would show a wrong end, and are judged
- * on the minute, so with no count running the title changes at most once a minute.
+ * Writes `tabTitle` to the tab. Called in `Shell`, inside every provider, since the timer's
+ * provider sits outside the break's and can't read a running break. Today's timeclock is worked out
+ * here rather than taken from `useTodayAlarms`, whose `tc` is null for 3 s after every punch and
+ * while a come-back refresh is out, so the title would fall back to "Clockspan" then; the store's
+ * shown copy has a punch from the tap on. Today is read, never loaded: `useTodayAlarms` loads and
+ * refreshes it. The deadlines wait for the settings, as the alarms do, since the defaults would
+ * show a wrong end, and are judged on the minute, so with no count running the title changes at
+ * most once a minute.
  */
 export function useTabTitle(today: string, now: number): void {
   const { running, paused, countdownSeconds, name } = useTimer();

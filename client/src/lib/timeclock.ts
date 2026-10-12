@@ -17,6 +17,8 @@ export interface TimeclockResult {
   lunchOut: number | null;
   /** Deadline by which lunch must start (clockIn + lunchDeadlineMinutes). */
   lunchBy: number | null;
+  /** While at lunch, with the meal periods on and a lunch length set: Lunch out plus the lunch length. Null otherwise. */
+  lunchEndsAt: number | null;
   lunchStatus: LunchStatus;
   workedSeconds: number;
   remainingSeconds: number;
@@ -49,6 +51,8 @@ export interface TimeclockResult {
   outOfOrder: { position: number; after: number } | null;
   /** Today's Clock out typed ahead of now, with the punches in order; null otherwise. */
   typedClockOut: number | null;
+  /** The In punch the clock reached last, while it is still open: null while not clocked in. */
+  workingSince: number | null;
   /**
    * A past day still clocked in at its end, with its punches in order: nothing says when the work
    * stopped, so `workedSeconds` runs to the end of the day and no hours total counts it.
@@ -103,6 +107,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockIn,
     lunchOut,
     lunchBy: null,
+    lunchEndsAt: null,
     lunchStatus: 'none',
     workedSeconds: 0,
     remainingSeconds: workTarget,
@@ -113,6 +118,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealStatus: 'none',
     outOfOrder: null,
     typedClockOut: null,
+    workingSince: null,
     unclosed: false,
   };
   if (clockIn == null) return empty;
@@ -214,6 +220,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockIn,
     lunchOut,
     lunchBy,
+    lunchEndsAt: state === 'at-lunch' && settings.mealRules && lunchSeconds > 0 ? lunchOut! + lunchSeconds * 1000 : null,
     lunchStatus,
     workedSeconds,
     remainingSeconds,
@@ -224,6 +231,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealStatus,
     outOfOrder,
     typedClockOut: finalOut == null && !outOfOrder ? finalAt : null,
+    workingSince: openIn,
     unclosed: opts.frozen === true && clockedIn && !outOfOrder,
   };
 }

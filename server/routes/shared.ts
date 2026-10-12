@@ -22,7 +22,7 @@ export function findDay(db: DB, userId: number, date: string): DayRow | undefine
   return db.prepare(`SELECT ${DAY_COLUMNS} FROM days WHERE user_id = ? AND date = ?`).get(userId, date) as DayRow | undefined;
 }
 
-/** Ids the client or the server mints (a task's, a category's): 12 hex chars (`newUid`); only the shape is checked, loosely. */
+/** Ids the client or the server mints (a task's, a category's): 32 hex chars (`newUid`; 12 on older rows); only the shape is checked, loosely. */
 export const UID_RE = /^[a-z0-9]{8,32}$/i;
 
 export function ensureDay(db: DB, userId: number, date: string): number {

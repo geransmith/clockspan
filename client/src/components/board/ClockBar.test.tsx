@@ -45,6 +45,12 @@ describe('ClockBar', () => {
     ]);
   });
 
+  it('reads Back By, the end of lunch and the time left at lunch, amber inside 15 minutes', async () => {
+    await renderBar(makeDay(TODAY, { punches: punchesAt(at(8), at(12, 20)) }), at(12, 36));
+    expect(items()[1]).toEqual(['Back By', hhmm(at(12, 50)), 'In 14m']);
+    expect(document.querySelectorAll('.clock-bar dl > div')[1]!.className).toBe('tile--warn');
+  });
+
   it('moves the time left on with the minute it is handed', async () => {
     const again = await renderBar(makeDay(TODAY, { punches: punchesAt(at(8)) }));
     again(T0 + MINUTE_MS);

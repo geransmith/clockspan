@@ -21,7 +21,17 @@ interface Props {
   day: AlarmDayState;
   settings: Settings;
 }
-const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn(), missedClockIn: null, clockInAt: vi.fn() };
+const NO_DAY: AlarmDayState = {
+  overtimeApproved: false,
+  retroDone: false,
+  breaks: [],
+  timerRunning: false,
+  openRetro: vi.fn(),
+  missedClockIn: null,
+  clockInAt: vi.fn(),
+  startBreak: vi.fn(),
+  timerStarting: false,
+};
 
 function renderAlarms(props: Partial<Props> = {}) {
   const initialProps: Props = { date: TODAY, tc: null, now: T0, day: NO_DAY, settings, ...props };
@@ -94,6 +104,24 @@ describe('firing', () => {
   });
 });
 
+describe('lunch end', () => {
+  it('rings when lunch is over and replaces that banner with each repeat, so they never stack', () => {
+    // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ends now.
+    const lunchAt = (now: number) => tcAt(now, T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS);
+    const { rerender } = renderAlarms({ tc: lunchAt(T0) });
+    expect(tags()).toEqual(['alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: undefined }),
+    );
+    const later = T0 + 15 * MINUTE_MS;
+    rerender({ date: TODAY, tc: lunchAt(later), now: later, day: NO_DAY, settings });
+    expect(tags()).toEqual(['alarm:lunchEnd', 'alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Ended 15 min Ago', tone: 'warn', chime: settings.sounds.overdue }),
+    );
+  });
+});
+
 describe('clock-out and retro', () => {
   it('offers the banner buttons it was given', () => {
     const approveOvertime = vi.fn();
@@ -126,14 +154,14 @@ describe('clock-out and retro', () => {
     expect(planned.action).toEqual({ label: 'Overtime Approved', run: approveOvertime });
   });
 
-  it('approving overtime while the clock-out banner is up clears that banner and no other', () => {
+  it("approving overtime while the clock-out banner is up clears that banner, and lifts the break alarm's hold", () => {
     const { rerender } = renderAlarms({ tc: overDay });
     expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);
     vi.mocked(dismissByTag).mockClear();
     // Approved from the card's switch (the banner's own button closes its banner itself).
     rerender({ date: TODAY, tc: overDay, now: T0, day: { ...NO_DAY, overtimeApproved: true }, settings });
     // A clocked-in day takes "Not Clocked In" down on every judged tick.
-    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:clockOut']]);
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['clock-in'], ['alarm:clockOut'], ['alarm:noBreak']]);
   });
 
   it("takes the banners down when the clock-in is cleared or the day changes, and not while today's punches settle", () => {
@@ -144,14 +172,30 @@ describe('clock-out and retro', () => {
     rerender({ date: TODAY, tc: null, now: T0, day: NO_DAY, settings });
     expect(dismissByTag).not.toHaveBeenCalled();
     rerender({ date: TODAY, tc: tcAt(T0), now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
+      'alarm:clockOut',
+      'alarm:lunchBy',
+      'alarm:lunchEnd',
+      'alarm:noBreak',
+      'alarm:retro',
+      'alarm:secondMeal',
+      'clock-in',
+    ]);
 
     // Past midnight, yesterday's banners (and their buttons) go with the day, before the new
     // day's punches have been judged.
     const next = renderAlarms({ tc: overDay });
     vi.mocked(dismissByTag).mockClear();
     next.rerender({ date: '2026-09-29', tc: null, now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
+      'alarm:clockOut',
+      'alarm:lunchBy',
+      'alarm:lunchEnd',
+      'alarm:noBreak',
+      'alarm:retro',
+      'alarm:secondMeal',
+      'clock-in',
+    ]);
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {
@@ -161,6 +205,43 @@ describe('clock-out and retro', () => {
     const moved = { ...overDay, clockOutAt: overDay.clockOutAt! + 10 * MINUTE_MS };
     rerender({ date: TODAY, tc: moved, now: T0, day: { ...NO_DAY, retroDone: true }, settings });
     expect(dismissByTag).toHaveBeenCalledWith('alarm:clockOut');
+  });
+});
+
+describe('break alarm', () => {
+  const on = makeSettings({ alarms: { ...settings.alarms, noBreak: { ...settings.alarms.noBreak, enabled: true } } });
+  // Clocked in 95 min ago with no break: due 5 min ago.
+  const due = tcAt(T0, T0 - 95 * MINUTE_MS);
+  const props = (day: Partial<AlarmDayState> = {}, tc = due): Props => ({ date: TODAY, tc, now: T0, day: { ...NO_DAY, ...day }, settings: on });
+  const banner = () => vi.mocked(alert).mock.calls.find(([a]) => a.tag === 'alarm:noBreak')![0];
+
+  it('chimes the warning sound when due and on the hourly repeat', () => {
+    const { rerender } = renderAlarms(props());
+    expect(banner()).toMatchObject({ title: '1h 35m Without a Break', chime: on.sounds.lead, sticky: true });
+    vi.mocked(alert).mockClear();
+    // An hour on, with the same clock-in: the 60-min repeat.
+    const later = T0 + 60 * MINUTE_MS;
+    rerender({ ...props({}, tcAt(later, T0 - 95 * MINUTE_MS)), now: later });
+    expect(banner()).toMatchObject({ title: '2h 35m Without a Break', chime: on.sounds.lead });
+  });
+
+  it('offers Start Break for the break length, which does nothing once a timer start is out', () => {
+    const startBreak = vi.fn();
+    const { rerender } = renderAlarms(props({ startBreak }));
+    const { action } = banner();
+    expect(action?.label).toBe('Start Break · 5 min');
+    action!.run();
+    expect(startBreak).toHaveBeenCalledExactlyOnceWith(5);
+    rerender(props({ startBreak, timerStarting: true }));
+    action!.run();
+    expect(startBreak).toHaveBeenCalledOnce();
+  });
+
+  it('takes its banner down once a session runs', () => {
+    const { rerender } = renderAlarms(props());
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ timerRunning: true }));
+    expect(dismissByTag).toHaveBeenCalledWith('alarm:noBreak');
   });
 });
 

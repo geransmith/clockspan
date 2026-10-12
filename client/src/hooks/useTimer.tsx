@@ -5,8 +5,8 @@ import { pausedSecondsAfter } from '../../../shared/timer.js';
 import type { Session, SessionResponse } from '../types';
 import { alert, dismissByTag, warnSaveFailed } from '../lib/alerts';
 import { ApiError } from '../lib/apiError';
-import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_PAUSED_OUT } from '../lib/copy';
-import { formatDuration } from '../lib/format';
+import { TIMER_DONE, TIMER_DUE, TIMER_ELSEWHERE, TIMER_KICKER, TIMER_PAUSED_OUT } from '../lib/copy';
+import { formatDuration, formatMinutes } from '../lib/format';
 import { addPending, fetched, settle, settleWith, shown, untracked, type Tracked } from '../lib/optimistic';
 import { patchRow } from '../lib/priorities';
 import { editedSession, sessionName, sessionRow } from '../lib/retro';
@@ -224,37 +224,46 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   // began, so nothing after it is logged). It sends the plan and pause it judged by, and the
   // server refuses (409) a row another device changed since: given time or resumed, it may not
   // be due any more. A row deleted there since is a 404. Either refusal brings a sync
-  // (CHANGED_ELSEWHERE, api.ts) that shows what the session is now.
+  // (CHANGED_ELSEWHERE, api.ts) that shows what the session is now. Its banner stays until it is
+  // closed or the next session starts, since its user wasn't there when it ended.
   useEffect(() => {
     if (!running || !loaded || syncing || completing.current || now < retry.current.at) return;
     const forgotten = pausedForSeconds >= PAUSE_LIMIT_SECONDS;
     if (!(due && overrunSeconds >= DUE_GRACE_SECONDS) && !forgotten) return;
     const session = running;
     const title = name;
+    const over = formatMinutes(Math.floor(overrunSeconds / 60));
     end(() => api.finishSession(session.id, false, { plannedSeconds: session.plannedSeconds, pausedAt: session.pausedAt }))
       .then((done) => {
         retry.current = { at: 0, delay: 0 };
-        // Cancelled on another device before this one heard: nothing to celebrate.
-        if (done.status !== 'completed') return;
+        // Cancelled on another device before this one heard: nothing to celebrate. A session a
+        // sync showed meanwhile runs on, and a banner about the one before would sit over it.
+        if (done.status !== 'completed' || shown(current())) return;
         if (forgotten) {
           alert({
+            kicker: TIMER_KICKER,
             title: TIMER_PAUSED_OUT.title,
             body: TIMER_PAUSED_OUT.body(title, formatDuration(done.durationSeconds)),
             tone: 'info',
             tag: 'timer-complete',
+            sticky: true,
             sound: false,
             notifications: false,
           });
           return;
         }
+        // Not the plan: a finish by hand on another device landed first, and its user was there.
+        if (done.durationSeconds !== session.plannedSeconds) return;
         // The chime played when the end came, unless the page was closed then.
         const chimed = chimedFor(chimedEnd.current, dueKey(session.id, endAt));
         alert({
+          kicker: TIMER_KICKER,
           title: TIMER_DONE.title,
-          body: TIMER_DONE.body(title, formatDuration(done.durationSeconds)),
+          body: TIMER_DONE.body(title, formatDuration(done.durationSeconds), over),
           tone: 'success',
           chime: settings.sounds.timer,
           tag: 'timer-complete',
+          sticky: true,
           sound: !chimed && settings.sound,
           notifications: !chimed && settings.notifications,
         });
@@ -263,7 +272,29 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         const delay = nextBackoff(retry.current.delay);
         retry.current = { at: Date.now() + delay, delay };
       });
-  }, [running, name, loaded, syncing, now, endAt, due, overrunSeconds, pausedForSeconds, end, settings.sound, settings.sounds.timer, settings.notifications]);
+  }, [
+    running,
+    name,
+    loaded,
+    syncing,
+    now,
+    endAt,
+    due,
+    overrunSeconds,
+    pausedForSeconds,
+    end,
+    current,
+    settings.sound,
+    settings.sounds.timer,
+    settings.notifications,
+  ]);
+
+  // A session starting, on this device or another, takes the last one's ending down. Keyed on
+  // whether one runs, not on the session, so a rename or a pause leaves it.
+  const live = running != null;
+  useEffect(() => {
+    if (live) dismissByTag('timer-complete');
+  }, [live]);
 
   useWakeLock(running != null && !paused && !due && settings.keepScreenAwake);
 

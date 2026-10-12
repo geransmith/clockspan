@@ -54,11 +54,14 @@ afterEach(() => {
   document.title = '';
 });
 
-it('waits for the settings before it shows a deadline', async () => {
+it('waits for the settings before it shows a deadline, though not before a break', async () => {
   const settings = deferredAnswer<Settings>();
   vi.mocked(api.getSettings).mockReturnValue(settings.promise);
+  serve(punchesAt(T0 - 30 * MINUTE_MS), { breaks: [makeBreak({ startedAt: T0 - MINUTE_MS, endedAt: T0 + MINUTE_MS })] });
   render();
   await settle();
+  expect(document.title).toBe('Break 1:00 — Clockspan');
+  await settle(MINUTE_MS);
   expect(document.title).toBe('Clockspan');
   settings.resolve(makeSettings({ timeFormat: '12h' }));
   await settle();

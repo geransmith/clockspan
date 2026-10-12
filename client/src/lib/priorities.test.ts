@@ -33,7 +33,7 @@ describe('newTaskRow', () => {
     const row = newTaskRow('Ship it', 'cafe00000001', 100);
     const { position: _position, ...expected } = makePriority(0, 'Ship it', { uid: row.uid, addedAt: 100, categoryUid: 'cafe00000001', listed: 0 });
     expect(row).toStrictEqual(expected);
-    expect(row.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(row.uid).toMatch(/^[0-9a-f]{32}$/);
     expect(newTaskRow('Ship it', null, 100).uid).not.toBe(row.uid);
   });
 });
@@ -137,9 +137,9 @@ describe('pickWarning', () => {
 });
 
 describe('newUid', () => {
-  it('is twelve lowercase hex chars and not repeated', () => {
+  it('is 32 lowercase hex chars and not repeated', () => {
     const a = newUid();
-    expect(a).toMatch(/^[0-9a-f]{12}$/);
+    expect(a).toMatch(/^[0-9a-f]{32}$/);
     expect(newUid()).not.toBe(a);
   });
 });
@@ -151,7 +151,7 @@ describe('editPriority', () => {
   it('mints a uid and stamps addedAt the first time a free row gets text', () => {
     const next = editPriority(blank, { text: 'Ship it' }, 100);
     expect(next).toMatchObject({ position: 2, text: 'Ship it', done: false, addedAt: 100 });
-    expect(next.uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(next.uid).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("keeps the task's uid, addedAt and category through later edits and a blank box", () => {

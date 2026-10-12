@@ -246,7 +246,7 @@ describe('priorities', () => {
     await act(async () => {
       uid = await result.current.addPriority(TODAY, 'From the timer');
     });
-    expect(uid).toMatch(/^[0-9a-f]{12}$/);
+    expect(uid).toMatch(/^[0-9a-f]{32}$/);
     const rows = result.current.days[TODAY]!.priorities;
     expect(rows.map((p) => p.text)).toEqual(['First', 'From the timer']);
     expect(rows[1]).toEqual(makePriority(2, 'From the timer', { uid, listed: 0 }));

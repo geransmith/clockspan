@@ -214,10 +214,13 @@ export const FINISH_CHOICE = {
   back: 'Back',
 } as const;
 
-/** The alert when a timer that ran out got no answer and was logged at its planned length. */
+/** The kicker on the timer's two ending banners (Focus Session Complete, Focus Session Closed). */
+export const TIMER_KICKER = 'Focus timer';
+
+/** The alert when a timer that ran out got no answer and was logged at its planned length; `over` is the time past it. */
 export const TIMER_DONE = {
   title: 'Focus Session Complete',
-  body: (name: string, duration: string) => named(name, `${duration} logged.`),
+  body: (name: string, logged: string, over: string) => named(name, `${logged} logged, the planned length. The ${over} after it aren't counted.`),
 } as const;
 
 /** Banner when a pause was left for an hour: the session was closed where the pause began. */
@@ -233,6 +236,7 @@ export const BREAK = {
   end: 'End Break',
   over: "Break's Over",
   overBody: 'Pick the next thing, or start a timer.',
+  kicker: 'Break',
 } as const;
 
 /**
@@ -242,7 +246,6 @@ export const BREAK = {
  */
 export const TAB_TITLE = {
   app: 'Clockspan',
-  /** A line with " — Clockspan" after it. */
   of: (line: string) => `${line} — Clockspan`,
   session: (countdown: string, name: string, paused: boolean) => `${paused ? 'Paused ' : ''}${countdown}${name ? ` · ${name}` : ''}`,
   break: (countdown: string) => `Break ${countdown}`,
@@ -263,10 +266,11 @@ export const BREAK_SUGGESTION = {
   start: 'Start Break',
 } as const;
 
-/** The one button an alarm banner can carry: clock-out's and the retrospective's. */
+/** The one button an alarm banner can carry: clock-out's, the retrospective's and the break alarm's. */
 export const ALARM_ACTIONS = {
   approveOvertime: 'Overtime Approved',
   openRetro: 'Open Retrospective',
+  startBreak: (minutes: number) => `Start Break · ${minutes} min`,
 } as const;
 
 /** The banner a session or break logged with no Clock in raises once a day (`useAlarms`), and its button. */

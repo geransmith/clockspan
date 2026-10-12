@@ -68,12 +68,12 @@ export function pickWarning(kind: WarningKind, avoid?: string, rng: () => number
 }
 
 /**
- * Stable id for a priority so sessions can point at it after rows are renumbered. Twelve
- * hex chars from getRandomValues: randomUUID needs a secure context and a self-hosted
- * sheet on plain http isn't one.
+ * A new task's or category's id: 32 hex chars (128 bits) from getRandomValues, so one user's
+ * ids never meet. randomUUID needs a secure context and a self-hosted sheet on plain http
+ * isn't one.
  */
 export function newUid(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 

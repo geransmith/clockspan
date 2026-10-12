@@ -67,7 +67,7 @@
 
 ## Run locally (for testing and development)
 
-Requirements: **Node 24** (`nvm use` picks it up from `.nvmrc`). On an older Node, npm refuses to install or run anything.
+Requirements: **Node 24** (`nvm use` picks it up from `.nvmrc`). On an older Node, npm refuses to install or run anything. Docker (Docker Desktop, OrbStack or another runtime with a `docker` command) is recommended but optional: `npm run smoke` uses it to build and boot the image before a pull request, and passes with a note without it.
 
 ```bash
 npm install
@@ -89,6 +89,7 @@ npm run lint           # oxlint (correctness, type-aware TypeScript, React hooks
 npm run format         # Prettier (CI runs format:check)
 npm run seed           # fill the local database with sample days (see below)
 npm run build          # production build → dist/
+npm run smoke          # build the Docker image for amd64 and arm64 and boot each, as CI does (passes without Docker)
 npm start              # serve the production build on http://localhost:3000 (PORT to change; Docker sets 8080)
 ```
 

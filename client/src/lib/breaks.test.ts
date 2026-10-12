@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { BREAK_SECONDS } from '../../../shared/timer.js';
 import { breakAt, completedSession, makeSession, T0, type EndPatch } from '../test/fixtures';
-import { breakSeconds, endBreaksAt, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
+import { breakSeconds, endBreaksAt, lastBreakEnd, MAX_BREAK_MINUTES, MIN_FOCUS_SECONDS, runningBreak, SET_GAP_MINUTES, SET_SIZE, suggestBreak } from './breaks';
 
 const session = (id: number, startedAt: number, minutes: number, extra: EndPatch = {}) => completedSession(id, startedAt, minutes * 60, extra);
 
@@ -109,5 +109,15 @@ describe('logged breaks', () => {
     expect(runningBreak(breaks.slice(0, 1), T0 + 5 * MINUTE_MS)).toBeNull();
     expect(runningBreak(breaks, T0 + 35 * MINUTE_MS)).toBe(breaks[1]);
     expect(runningBreak(breaks, T0 + 40 * MINUTE_MS)).toBeNull();
+  });
+
+  it('finds when the last break over by now ended: the one before a break still running', () => {
+    const breaks = [breakAt(1, 0, 5), breakAt(2, 30, 10)];
+    expect(lastBreakEnd([], T0)).toBeNull();
+    expect(lastBreakEnd(breaks.slice(0, 1), T0 + 2 * MINUTE_MS)).toBeNull();
+    expect(lastBreakEnd(breaks, T0 + 35 * MINUTE_MS)).toBe(T0 + 5 * MINUTE_MS);
+    expect(lastBreakEnd(breaks, T0 + 40 * MINUTE_MS)).toBe(T0 + 40 * MINUTE_MS);
+    // Ended early: its end moved back.
+    expect(lastBreakEnd([breaks[0]!, { ...breaks[1]!, endedAt: T0 + 33 * MINUTE_MS }], T0 + 35 * MINUTE_MS)).toBe(T0 + 33 * MINUTE_MS);
   });
 });
