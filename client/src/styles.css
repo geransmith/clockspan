@@ -298,6 +298,8 @@ button {
    after it. */
 .btn-icon[aria-pressed='true'],
 .btn-icon[aria-pressed='true']:hover,
+.topbar-actions .btn-icon[aria-expanded='true'],
+.topbar-actions .btn-icon[aria-expanded='true']:hover,
 .chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: transparent;
@@ -898,10 +900,13 @@ button {
   display: flex;
   gap: 6px;
 }
-/* Four buttons (Board, History, Settings, the user) and the brand's name don't fit a 360 px
-   phone: the name goes from sight there, still the button's name, and the logo stays. From
-   640 px the buttons' words would overflow the row, so they wait for 760 px. */
-.topbar-row--crowded .brand-name {
+/* Board, History, Add to Later, Settings and, signed in, the user: the buttons and the brand's
+   name don't fit a 360 px phone, so the name goes from sight below 420 px, still the button's
+   name, and the logo stays. From 640 px the buttons' words would overflow the row, so they wait
+   for 780 px: signed in, the name and five worded buttons take 727 px, which the row has at 760
+   only with no classic scrollbar's gutter. The same in every auth mode, so the header doesn't
+   change with it. */
+.topbar-row .brand-name {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -910,7 +915,7 @@ button {
   white-space: nowrap;
 }
 @media (min-width: 420px) {
-  .topbar-row--crowded .brand-name {
+  .topbar-row .brand-name {
     position: static;
     width: auto;
     height: auto;
@@ -919,11 +924,11 @@ button {
     white-space: normal;
   }
 }
-.topbar-row--crowded .btn-text {
+.topbar-row .btn-text {
   display: none;
 }
-@media (min-width: 760px) {
-  .topbar-row--crowded .btn-text {
+@media (min-width: 780px) {
+  .topbar-row .btn-text {
     display: inline;
   }
 }
@@ -1630,11 +1635,11 @@ button {
 }
 
 /* ---------- running bar ---------- */
-/* The bar and the banners, under the header and stuck to the top once it scrolls away. Above the
-   page's own stacking (a board tick, a sheet card being dragged), level with the burst, which
-   comes later in the tree and so paints over a Done pressed on the bar; the category list (51)
-   and the board's lifted card (dnd-kit's overlay, 999) stay above. No padding or border here:
-   the bar's margin collapses through, so no gap sticks with it. */
+/* The bar, the Later strip and the banners, under the header and stuck to the top once it scrolls
+   away. Above the page's own stacking (a board tick, a sheet card being dragged), level with the
+   burst, which comes later in the tree and so paints over a Done pressed on the bar; the category
+   list (51) and the board's lifted card (dnd-kit's overlay, 999) stay above. No padding or border
+   here: the last band's margin collapses through, so no gap sticks with it. */
 .top-stack {
   position: sticky;
   top: var(--safe-top);
@@ -1751,9 +1756,45 @@ button.log-label:hover {
   }
 }
 
+/* ---------- Later strip ---------- */
+/* A band like the running bar, under it or under the header. No display here, or `hidden` (on the
+   Board) stops hiding it. Its lines are always there (one is a live region), and an empty one has
+   no height, so only a line with words takes room under the box. */
+.later-strip {
+  margin-bottom: 16px;
+  background: var(--surface);
+  border-block: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.running-bar:has(+ .later-strip:not([hidden])) {
+  margin-bottom: 0;
+}
+.running-bar + .later-strip {
+  border-top: 0;
+}
+.later-strip-inner {
+  max-width: var(--page-w);
+  margin: 0 auto;
+  padding: 8px max(12px, var(--safe-right)) 8px max(12px, var(--safe-left));
+}
+@media (min-width: 640px) {
+  .later-strip-inner {
+    padding-inline: max(16px, var(--safe-left)) max(16px, var(--safe-right));
+  }
+}
+.later-strip .board-add-box {
+  flex-wrap: nowrap;
+}
+.later-strip-inner > p {
+  padding-inline: 2px;
+}
+.later-strip-inner > p:not(:empty) {
+  margin-top: 4px;
+}
+
 /* ---------- banners ---------- */
-/* Hung under the running bar, or under the header with no timer running, so a banner never covers
-   the bar's buttons. */
+/* Hung under the running bar and the Later strip, or under the header with neither, so a banner
+   never covers their buttons. */
 .banners {
   position: absolute;
   top: calc(100% + 8px);

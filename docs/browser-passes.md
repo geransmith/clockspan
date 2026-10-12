@@ -155,7 +155,7 @@ what `npm run seed` writes.
   lines wrap. At 375: the switch shows one column, the notice wraps, the dialog is a bottom sheet
   whose Move to and Start lengths wrap under their labels (four targets on a left-open task), and
   with sign-in on (`web-local`, `npm run seed -- --auth local --sessions`, the printed cookie set)
-  the header's four buttons fit with the brand's name gone, the same as on the sheet.
+  the header's five buttons fit with the brand's name gone, the same as on the sheet.
   Light and dark. The drag pass: at 1440, drag with the mouse from anywhere on a card between each
   pair of columns (Later and Next take the card where it is dropped; a press that moves under 6 px
   opens the dialog, and no click lands after a drag), a done row onto Later (the notice), then by
@@ -183,7 +183,7 @@ what `npm run seed` writes.
   earlier day's tick of a recurring priority that stopped repeating shows its note as text. A key
   typed into a note does nothing. Categories (with about 30 added by `curl` to
   `/api/board/categories` for a long list): a box's chip (a pick, New category, kept after a reload
-  and in the other boxes), a card dialog's chip with its list opening over the sheet, unclipped,
+  and in the other boxes and in the Later strip), a card dialog's chip with its list opening over the sheet, unclipped,
   scrolling inside with the box in view, its Escape closing only the list, the cards' dot and name
   (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches wrapping at
   375, Remove, the touch areas).
@@ -192,6 +192,18 @@ what `npm run seed` writes.
   "Nothing parked. N or + adds a card." at 1280 and 1000, and "Nothing parked. + adds a card." on
   a touch screen (`pointer: coarse`, as at the 375 preset) and with Keyboard off; Next reads "Tasks
   left open on earlier days wait here for two weeks."; each wraps cleanly in its column.
+- **The Later strip**: after `npm run seed -- --running`, at 1280 and the 375 preset, light and
+  dark: the strip under the running bar and, with no timer, under the header; Add to Later's pressed
+  tint while it is open; L and the button open it with the focus in the box, on the sheet and on
+  History; Enter puts the card at the top of Later and shows "Added …"; Escape, × and an empty
+  Enter put the focus back on the button with a scrolled page left where it was; in Chrome and
+  Safari, Add to Later pressed on an open strip, empty and then with text, closes it (clearing the
+  text) and it stays closed; with `window.fetch` wrapped so `POST /api/items` rejects, the line
+  shows and no banner; with that reject delayed a few seconds, Enter, a second thought typed and
+  Board pressed before the answer, the banner shows once; text in the strip survives B and back;
+  on the Board, L and the button open Later's box and no strip shows. Header widths: signed in
+  (`web-local`, `npm run seed -- --auth local --sessions`) at 320, 360, 375 and 780 px, with a
+  classic scrollbar too; signed out from 640 to 780 px, icons only.
 - **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
@@ -201,8 +213,9 @@ what `npm run seed` writes.
   the focus on its header button. An h typed into a day log label (the Inbox row's edit), a
   priority, Clock in's hour, the date picker and an open category list, or pressed with Settings
   open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
-  the board at 1440, N opens Later's box (with a box already open too), R does nothing, and a key
-  pressed during a keyboard drag does nothing. With Settings → Sheet → Keyboard off no key acts.
+  the board at 1440, N and L open Later's box (with a box already open too), R does nothing, and a
+  key pressed during a keyboard drag does nothing. Off the board, L opens the Later strip with the
+  focus in its box, and pressed again with the strip open only puts the focus back in it. With Settings → Sheet → Keyboard off no key acts.
   The header buttons' titles name their keys (none with Keyboard off).
   The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
   button's key.

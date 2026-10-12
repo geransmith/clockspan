@@ -1,8 +1,8 @@
 /**
  * The board's logic, with no React and no dnd-kit: which column each task and each of today's
  * rows shows in (`boardColumns`) and the day a task left open leaves Next (`leavesNext`), what a
- * move does and which store it writes (`planMove`), a write's failure as a banner (`saved`, which
- * the sheet's note uses too), where a drop lands and what a drag says (`dropTarget`, `withDrag`,
+ * move does and which store it writes (`planMove`), a write's failure as a banner or the caller's
+ * own line (`saved`, which the sheet's note and the Later strip use too), where a drop lands and what a drag says (`dropTarget`, `withDrag`,
  * `moveAnnouncement`), the leftovers the left-open offer brings back (`offeredLeftovers`) and the
  * top of Next it offers after them (`topOfNext`), what New category makes of a name
  * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
@@ -20,7 +20,7 @@ import { FREE_ROW } from '../../../shared/priorities.js';
 import { categoryName, sameText } from '../../../shared/text.js';
 import type { Board, BoardCard, Category, CategoryColor, Day, OpenLane, Priority, Recurring } from '../types';
 import { warnQuietly, warnSaveFailed } from './alerts';
-import { BOARD, BOARD_DRAG, DONE_STAYS } from './copy';
+import { BOARD, BOARD_DRAG, DONE_STAYS, SAVE_FAILED } from './copy';
 import { isTaskRow } from './priorities';
 import type { PrioritySeed } from './recurring';
 
@@ -94,6 +94,15 @@ export function laneStart(columns: BoardColumns, lane: OpenLane): string | null 
 }
 
 const byPosition = (a: BoardCard, b: BoardCard) => a.position - b.position;
+
+/**
+ * Where the Later strip puts a task, off the Board: the first of Later's own tasks by position, as
+ * `placed` orders the lane; null for an empty Later. The Board keeps `laneStart`, which names a
+ * card its columns show.
+ */
+export function laterTop(cards: BoardCard[]): string | null {
+  return cards.filter((c) => c.lane === 'later').sort(byPosition)[0]?.uid ?? null;
+}
 
 /** The first day a task left open on `leftOpen` no longer shows in Next, `LOOKBACK_DAYS` + 1 days on. */
 export function leavesNext(leftOpen: string): string {
@@ -339,12 +348,18 @@ export function moveTargets(item: BoardItem, today: string): ColumnId[] {
 /** A board move the store turned down before it changed anything; its message is the line to show. */
 export class MoveRefused extends Error {}
 
-/** A board write's failure as a banner: a refusal's own line, else the save one; whether it saved. */
-export function saved(write: Promise<unknown>): Promise<boolean> {
+/**
+ * A board write's failure as a banner: a refusal's own line, else the save one; whether it saved.
+ * `say` is the caller's own line (the Later strip's), handed the refusal's message or
+ * `SAVE_FAILED.body`: when it answers true the banner stays down.
+ */
+export function saved(write: Promise<unknown>, say?: (line: string) => boolean): Promise<boolean> {
   return write.then(
     () => true,
     (err: unknown) => {
-      if (err instanceof MoveRefused) warnQuietly({ title: err.message, tag: 'board-move' });
+      const refused = err instanceof MoveRefused;
+      if (say?.(refused ? err.message : SAVE_FAILED.body)) return false;
+      if (refused) warnQuietly({ title: err.message, tag: 'board-move' });
       else warnSaveFailed();
       return false;
     },

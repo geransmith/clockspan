@@ -44,12 +44,12 @@ import { taskLogged } from '../../lib/retro';
 import { readStored, USER_KEYS, writeStored } from '../../lib/storage';
 import type { OpenLane, Priority } from '../../types';
 import { Burst } from '../Burst';
+import { Capture } from '../Capture';
 import { Folded } from '../Folded';
 import { PassFocusOnLeave } from '../FocusTimer';
 import { Plus } from '../Icons';
 import { LoadFailed } from '../LoadFailed';
 import { BoardCardView, type ItemDrag } from './BoardCard';
-import { Capture } from './Capture';
 import { CardDialog } from './CardDialog';
 import { ClockBar } from './ClockBar';
 import { canDrag, canSort, DraggableEntry, Lifted, SortableEntry, useBoardDrag } from './useBoardDrag';
@@ -192,8 +192,11 @@ export const Board = memo(function Board({
     });
     fields.current.get(id)?.focus();
   };
-  // N is Later's +, while that would open the box. A hook, so bound above the returns below.
-  const laterKey = useShortcut('new', board && day && pick && !boardFull(board) ? () => openAdd('later') : null);
+  // N and L are Later's +, while that would open the box (L also the header's Add to Later, which
+  // the Board's binding, the newer, takes over). Hooks, so bound above the returns below.
+  const addLater = board && day && pick && !boardFull(board) ? () => openAdd('later') : null;
+  const laterKey = useShortcut('new', addLater);
+  const parkKey = useShortcut('later', addLater);
 
   // Each failed read says so here, today's too, which no banner repeats on the board. A Try Again
   // stays until a read answers, its own or a refresh, so the focus moves only as it goes.
@@ -555,7 +558,7 @@ export const Board = memo(function Board({
   const add = (id: AddColumn, shut: string | null, onAdd: (title: string, categoryUid: string | null) => boolean): ColumnAdd => ({
     shut,
     onOpen: () => openAdd(id),
-    keys: id === 'later' ? laterKey : undefined,
+    keys: id === 'later' && laterKey ? `${laterKey} ${parkKey}` : undefined,
     box: adding.has(id) && (
       <Capture
         to={id}
@@ -742,7 +745,7 @@ export const Board = memo(function Board({
 interface ColumnAdd {
   shut: string | null;
   onOpen: () => void;
-  /** Its key, for `aria-keyshortcuts`: N on Later's. */
+  /** Its keys, for `aria-keyshortcuts`: N and L on Later's. */
   keys: string | undefined;
   box: ReactNode;
 }
@@ -786,6 +789,8 @@ function Column({
         {add && (
           <button
             ref={headRef}
+            // Later's is pressed by the header's Add to Later. Not `shut`: that is the line's.
+            id={`${shut}-button`}
             className="btn btn-ghost board-add"
             title={`Add to ${COLUMN_NAMES[id]}`}
             aria-disabled={add.shut ? true : undefined}
