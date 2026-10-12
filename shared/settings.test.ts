@@ -23,6 +23,7 @@ describe('DEFAULT_SETTINGS', () => {
       ['timeclock', 'left'],
       ['priorities', 'left'],
       ['timer', 'right'],
+      ['meetings', 'right'],
       ['log', 'right'],
       ['retro', 'right'],
     ]);

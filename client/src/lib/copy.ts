@@ -299,6 +299,9 @@ export const BANNERS_MORE = (n: number) => counted(n, 'more alert');
 export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
   `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;
 
+/** A meeting's end typed at or before its start, under its row on the Meetings card. */
+export const MEETING_ENDS_FIRST = 'The end is before the start.';
+
 /**
  * Above the sheet when `orderSlip` finds a punch out of place: the row out of place and the one it
  * should come after, as the card names them, with their times (`afterAt` null: empty).

@@ -80,6 +80,11 @@ what `npm run seed` writes.
   tiles move with no further key), `p` flips the period and ↑/↓ on a segment saves each step. In
   the browser pane send single `key` presses; the `type` action pastes the whole string into one
   segment.
+- **Meetings**: after `npm run seed`, the Meetings card on today's sheet (at the bottom of the right
+  column for a layout saved before it) at 1280 and the 375 preset, light and dark: the seeded call
+  on one line at 1280, its times and × over its title at 375 with a rule between meetings; Add
+  Meeting puts the focus in Title, a start fills a 30-minute end, and Add brings the focus back to
+  Add Meeting; no sideways scroll.
 - **Priorities or the timer card**: tick one row and press Add Priority (the notice lists the
   ticked row); in the timer's label box, the list of open rows on a press and on Tab (not on the
   focus Finish hands back), under the box at its width and over the card, whose height stays put as

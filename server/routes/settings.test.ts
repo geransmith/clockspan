@@ -83,7 +83,14 @@ describe('/api/settings', () => {
     const userId = ensureDefaultUser(app.db).id;
     app.db.prepare(`INSERT INTO settings (user_id, json) VALUES (?, ?)`).run(userId, JSON.stringify({ layout: [{ id: 'retro', visible: true }] }));
     const sides = (body: { layout: { id: string; side: string }[] }) => Object.fromEntries(body.layout.map((l) => [l.id, l.side]));
-    expect(sides((await app.api.get('/api/settings')).body)).toEqual({ retro: 'right', timeclock: 'left', priorities: 'left', timer: 'right', log: 'right' });
+    expect(sides((await app.api.get('/api/settings')).body)).toEqual({
+      retro: 'right',
+      timeclock: 'left',
+      priorities: 'left',
+      timer: 'right',
+      meetings: 'right',
+      log: 'right',
+    });
 
     const layout = DEFAULT_SETTINGS.layout.map((l) => (l.id === 'timer' ? { ...l, side: 'left' } : l));
     await app.api.put('/api/settings', { layout });

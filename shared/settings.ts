@@ -5,7 +5,7 @@
  */
 import type { SoundEvent, SoundId } from './sounds.js';
 
-export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'log', 'retro'] as const;
+export const CARD_IDS = ['timeclock', 'priorities', 'timer', 'meetings', 'log', 'retro'] as const;
 export type CardId = (typeof CARD_IDS)[number];
 
 /** The sheet's two columns on a wide screen. */
@@ -20,6 +20,7 @@ export const DEFAULT_SIDE: Readonly<Record<CardId, CardSide>> = Object.freeze({
   timeclock: 'left',
   priorities: 'left',
   timer: 'right',
+  meetings: 'right',
   log: 'right',
   retro: 'right',
 });

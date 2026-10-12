@@ -411,7 +411,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `PUT /days/:date/meetings` sets one uid and keeps the others, as the snooze route sets one alarm,
   so two devices editing different meetings both land; the server stores the title as `meetingTitle`
   (`shared/text.ts`) gives it, which the day store's `setMeeting` shows at once. A day holds at most
-  `MEETINGS_PER_DAY` keys, null ones included, and the prune takes them with their day.
+  `MEETINGS_PER_DAY` keys, null ones included, and the prune takes them with their day. The
+  Meetings card (`Meetings.tsx`) lists them by start (`dayMeetings`, `lib/meetings.ts`): a time typed
+  on a row saves the moment it is complete, as a punch does, a new start keeps the meeting's length,
+  an end at or before the start is refused in place (`MEETING_ENDS_FIRST`), the title saves on blur
+  or Enter, and × takes the meeting off the day.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`
