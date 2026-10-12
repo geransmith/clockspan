@@ -153,17 +153,19 @@ export function notificationPermission(): NotificationPermission | 'unsupported'
   return notificationsSupported() ? Notification.permission : 'unsupported';
 }
 
+/** Set once this browser was asked; not a `USER_KEYS` entry, since the permission is the browser's, whoever signs in. */
+const NOTIFICATIONS_ASKED = 'focus:notifications-asked';
+
+/** Allow's ask counts as the device's one too, so a prompt dismissed there isn't raised again by a tap. */
 export async function requestNotificationPermission(): Promise<NotificationPermission | 'unsupported'> {
   if (!notificationsSupported()) return 'unsupported';
+  writeStored(NOTIFICATIONS_ASKED, '1');
   try {
     return await Notification.requestPermission();
   } catch {
     return Notification.permission;
   }
 }
-
-/** Set once this browser was asked; not a `USER_KEYS` entry, since the permission is the browser's, whoever signs in. */
-const NOTIFICATIONS_ASKED = 'focus:notifications-asked';
 
 /**
  * Asks the browser for notification permission once per device, from inside a tap (Safari takes
@@ -173,7 +175,6 @@ const NOTIFICATIONS_ASKED = 'focus:notifications-asked';
  */
 export function offerNotifications(enabled: boolean): void {
   if (!enabled || notificationPermission() !== 'default' || navigator.userActivation?.isActive === false || readStored(NOTIFICATIONS_ASKED) !== null) return;
-  writeStored(NOTIFICATIONS_ASKED, '1');
   void requestNotificationPermission();
 }
 

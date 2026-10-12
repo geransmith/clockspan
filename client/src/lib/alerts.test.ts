@@ -253,6 +253,8 @@ describe('notifications', () => {
     FakeNotification.permission = 'default';
     expect(alerts.notificationPermission()).toBe('default');
     expect(await alerts.requestNotificationPermission()).toBe('granted');
+    // Allow's ask is the device's one too.
+    expect(stored.get('focus:notifications-asked')).toBe('1');
     FakeNotification.requestPermission = () => Promise.reject(new Error('gesture required'));
     expect(await alerts.requestNotificationPermission()).toBe('default');
   });
@@ -274,6 +276,7 @@ describe('notifications', () => {
   });
 
   it('asks once per device, in the tap, and writes down that it asked', () => {
+    vi.stubGlobal('navigator', {}); // a browser without userActivation still asks
     const requestPermission = vi.fn(() => Promise.resolve<NotificationPermission>('granted'));
     FakeNotification.requestPermission = requestPermission;
     FakeNotification.permission = 'default';
@@ -312,15 +315,6 @@ describe('notifications', () => {
     stored.set('focus:notifications-asked', '1');
     alerts.offerNotifications(true);
     expect(requestPermission).not.toHaveBeenCalled();
-  });
-
-  it('asks in a browser that has no userActivation to say whether this is a gesture', () => {
-    const requestPermission = vi.fn(() => Promise.resolve<NotificationPermission>('granted'));
-    FakeNotification.requestPermission = requestPermission;
-    FakeNotification.permission = 'default';
-    vi.stubGlobal('navigator', {});
-    alerts.offerNotifications(true);
-    expect(requestPermission).toHaveBeenCalledOnce();
   });
 
   it('shows a silent notification only when granted, and focuses the window on click', () => {

@@ -306,8 +306,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   commit, the timer's Done and the shortcut listener, for a timer key), where their tests prove
   the unlock inside the tap. `offerNotifications` asks for notification permission once per device
   (`focus:notifications-asked`, not a `USER_KEYS` entry: the permission is the browser's), inside
-  the tap and once the settings have loaded, from today's Clock in and `TimerLengths`' tap; the
-  only other ask is Allow in Settings → Alarms, the way back after a dismissal.
+  the tap and once the settings have loaded, from today's Clock in, the Not Clocked In banner's
+  "Clock In at …" and `TimerLengths`' tap; the only other ask is Allow in Settings → Alarms, which
+  counts as that one too and is the way back after a dismissal.
   What plays is `settings.sounds[event]`, an id from the catalog in `shared/sounds.ts`;
   `settings.sound` is the master switch over all of them, and `none` is the per-event off. A
   celebration (day complete and work week reached in `Timeclock.tsx`, a priority ticked in

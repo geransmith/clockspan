@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import {
@@ -206,8 +206,12 @@ describe('useTodayAlarms', () => {
       expect(banner()?.title).toBe('Not Clocked In');
       act(() => banner()!.action!.run());
       expect(unlockAudio).toHaveBeenCalledOnce();
+      expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
       await settle();
       expect(api.putPunches).toHaveBeenCalledWith(TODAY, punchesAt(T0 - 13 * MINUTE_MS), punchesAt());
+      const offered = vi.mocked(offerNotifications).mock.invocationCallOrder[0]!;
+      expect(vi.mocked(unlockAudio).mock.invocationCallOrder[0]).toBeLessThan(offered);
+      expect(offered).toBeLessThan(vi.mocked(api.putPunches).mock.invocationCallOrder[0]!);
     });
 
     it('sends nothing when a Clock in reached the page before the press', async () => {
