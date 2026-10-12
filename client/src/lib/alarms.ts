@@ -23,7 +23,8 @@ export interface TargetDay {
 
 /**
  * Today's targets and when each is armed. Lunch is armed until it is taken or the day is
- * done. Clock-out is only a fixed instant while working (on a break it drifts later), and
+ * done. The end of lunch is armed while at lunch (`lunchEndsAt`), so a Lunch in never punched
+ * still rings. Clock-out is only a fixed instant while working (on a break it drifts later), and
  * the retrospective shares it. Overtime approval disarms the clock-out target only: meal
  * periods are still required on an overtime day (California Labor Code §512), so lunch and
  * the second meal stay armed, and the planned end of the day is still the moment to look back.
@@ -45,6 +46,7 @@ export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & 
       at: tc.lunchBy ?? 0,
       armed: (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
+    { id: 'lunchEnd', at: tc.lunchEndsAt ?? 0, armed: tc.lunchEndsAt != null },
     { id: 'clockOut', at: end, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
     { id: 'retro', at: end, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
@@ -145,7 +147,7 @@ export function dueEvents(
  * is shown, since a warning seen late (the phone was asleep) says the time actually left. Also the
  * Clock out typed ahead (`typedClockOut`), which the clock-out warning names when it is the target.
  */
-type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
+type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'lunchMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
   hour12: boolean;
   now: number;
@@ -167,6 +169,7 @@ export const ALARM_TAG = 'alarm:';
 /** Each alarm's kicker, its name; a new `AlarmId` without one is a type error. */
 const ALARM_NAMES: Record<AlarmId, string> = {
   lunchBy: 'Lunch alarm',
+  lunchEnd: 'Lunch end alarm',
   clockOut: 'Clock-out alarm',
   secondMeal: 'Second meal alarm',
   retro: 'Retrospective',
@@ -233,6 +236,18 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         body: `Your lunch deadline was ${target}. Punch Lunch out as soon as you can.`,
         tone: 'danger',
       };
+    case 'lunchEnd': {
+      const lunch = `Lunch out at ${formatTime(e.target - ctx.lunchMinutes * MINUTE_MS, ctx.hour12)}; lunch is ${formatMinutes(ctx.lunchMinutes)}.`;
+      // Only a hand-made PUT gives it a lead: the editor has no Warn before row.
+      if (kind === 'lead') return { kicker, title: `Lunch Ends in ${left}`, body: lunch, tone: 'warn' };
+      if (kind === 'due') return { kicker, title: 'Lunch Is Over', body: lunch, tone: 'warn' };
+      return {
+        kicker,
+        title: `Lunch Ended ${formatMinutes(e.minutes)} Ago`,
+        body: 'Clock-out and retrospective alarms are off until Lunch in is punched.',
+        tone: 'warn',
+      };
+    }
     case 'secondMeal':
       if (kind === 'lead') {
         return {

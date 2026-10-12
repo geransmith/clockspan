@@ -150,6 +150,21 @@ describe('Timeclock', () => {
     expect(tile().querySelector('.tile-sub')).toBeNull();
   });
 
+  it('reads Back By at lunch, with the end of lunch, and Lunch By before Lunch out and after Lunch in', async () => {
+    const tile = (label: string) => screen.getByText(label).closest('.tile')!;
+    const sub = (label: string) => tile(label).querySelector('.tile-sub')!.textContent;
+    const { again } = await renderCard(TODAY, punchesAt(T0 - 4 * HOUR_MS));
+    expect(sub('Lunch By')).toBe('In 1h 00m');
+    // Lunch out at 8:50: the 30 min lunch ends at 9:20.
+    again(punchesAt(T0 - 4 * HOUR_MS, T0 - 10 * MINUTE_MS));
+    expect(screen.queryByText('Lunch By')).toBeNull();
+    expect(tile('Back By').querySelector('.tile-value')!.textContent).toMatch(/9:20/);
+    expect(sub('Back By')).toBe('In 20m');
+    again(punchesAt(T0 - 4 * HOUR_MS, T0 - 10 * MINUTE_MS, T0));
+    expect(screen.queryByText('Back By')).toBeNull();
+    expect(sub('Lunch By')).toMatch(/^Taken at /);
+  });
+
   it("asks for notifications on today's Clock in, in the tap before the save", async () => {
     const { onChange } = await renderCard();
     fireEvent.click(nowButton());

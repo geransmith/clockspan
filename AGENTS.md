@@ -6,13 +6,13 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out; folded to an Open
-button until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
-the second meal period, and a Board page for tasks that aren't for today (its In Progress column
-is today's Top Priorities; tasks carry categories, made from a chip or in Settings → Board, and
-any card can be set to repeat on weekdays from its dialog, which makes it a recurring priority:
-listed under Later's Repeats and offered on Top Priorities on those days). Each task (a
-priority, a board card, a recurring priority) is stored once, with one name, one category and
-one note; a day's list names the tasks on it.
+button until the day is clocked out), a week / month / quarter review, alarms for the lunch
+deadline, the end of lunch, clock-out and the second meal period, and a Board page for tasks that
+aren't for today (its In Progress column is today's Top Priorities; tasks carry categories, made
+from a chip or in Settings → Board, and any card can be set to repeat on weekdays from its dialog,
+which makes it a recurring priority: listed under Later's Repeats and offered on Top Priorities on
+those days). Each task (a priority, a board card, a recurring priority) is stored once, with one
+name, one category and one note; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones

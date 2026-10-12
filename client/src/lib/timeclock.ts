@@ -17,6 +17,8 @@ export interface TimeclockResult {
   lunchOut: number | null;
   /** Deadline by which lunch must start (clockIn + lunchDeadlineMinutes). */
   lunchBy: number | null;
+  /** While at lunch, with the meal periods on and a lunch length set: Lunch out plus the lunch length. Null otherwise. */
+  lunchEndsAt: number | null;
   lunchStatus: LunchStatus;
   workedSeconds: number;
   remainingSeconds: number;
@@ -103,6 +105,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockIn,
     lunchOut,
     lunchBy: null,
+    lunchEndsAt: null,
     lunchStatus: 'none',
     workedSeconds: 0,
     remainingSeconds: workTarget,
@@ -214,6 +217,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     clockIn,
     lunchOut,
     lunchBy,
+    lunchEndsAt: state === 'at-lunch' && settings.mealRules && lunchSeconds > 0 ? lunchOut! + lunchSeconds * 1000 : null,
     lunchStatus,
     workedSeconds,
     remainingSeconds,
