@@ -59,7 +59,7 @@
 
 **Layout.** Each user can reorder or hide the sheet's cards. A window 1100 px wide or more shows them in two columns, and any card can move to the other one.
 
-**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer until time's up, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
+**Keyboard.** Outside a text box: `N` adds a priority (on the board, a card in *Later*), `L` adds a card to the top of *Later* from any page, `S`, `B` and `H` go to the sheet, the board and History, `P` pauses or resumes the timer until time's up, `+` adds time, `F` finishes it once time's up, and `R` starts a break. `?` lists them, and one switch turns them off.
 
 **Phones.** Mobile layout, 44 px touch targets, installable (Android *Install app*, iOS *Add to Home Screen*; iOS shows notifications only from the installed app), a *keep screen awake* option so the countdown and chime stay live, and a light or dark theme that follows the device unless you pick one in Settings.
 

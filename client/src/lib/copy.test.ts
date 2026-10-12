@@ -12,6 +12,7 @@ import {
   DAYS_DELETED,
   DONE_STAYS,
   FINISH_CHOICE,
+  LATER_ADDED,
   LEFT_OPEN,
   LOAD_FAILED,
   PRIORITY_WARNINGS,
@@ -35,6 +36,10 @@ describe('copy builders', () => {
   it('names the punch out of place and the one it should come after, or that one missing', () => {
     expect(PUNCH_ORDER('Lunch in', '11:00 AM', 'Lunch out', '12:00 PM')).toBe('Lunch in (11:00 AM) is earlier than Lunch out (12:00 PM).');
     expect(PUNCH_ORDER('Clock out', '5:00 PM', 'Lunch in', null)).toBe('Clock out (5:00 PM) has no Lunch in before it.');
+  });
+
+  it('names the card the Later strip added', () => {
+    expect(LATER_ADDED('Call the vendor back')).toBe('Added “Call the vendor back” to Later.');
   });
 
   it('names the user in the delete confirm', () => {

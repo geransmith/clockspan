@@ -61,7 +61,7 @@ interface BoardState {
 interface BoardStore {
   /** Reads the board. Never rejects. */
   load(): Promise<void>;
-  /** A new task in a lane (a column's +, or a done item's new task), refused at the lanes' cap before it is sent. */
+  /** A new task in a lane (a column's +, the Later strip, or a done item's new task), refused at the lanes' cap before it is sent. */
   addItem(item: NewItem): Promise<void>;
   /**
    * A task off today's list edited on the board, or a weekday set or cleared on any task's card,
@@ -406,8 +406,8 @@ export function useBoardStore(): BoardStore {
 }
 
 /**
- * The category chip's data, for a view that offers the chip and passes it down (the board page and
- * the sheet); null before the board's first read. `create` gives the uid to set at once
+ * The category chip's data, for a view that offers the chip and passes it down (the board page, the
+ * sheet and the Later strip); null before the board's first read. `create` gives the uid to set at once
  * (`categoryForName`): a category is a soft link, so the row or card that takes it needs no wait.
  * A new or removed category goes out as an optimistic `addCategory`, and its failure (a stale copy
  * whose name another device took, or a server cap) takes it off, reads the board again and raises
