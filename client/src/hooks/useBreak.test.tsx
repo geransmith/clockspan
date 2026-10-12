@@ -98,7 +98,15 @@ it("starts a break on today's sheet, counts it down and announces its end once, 
   expect(result.current.endsAt).toBeNull();
   expect(alert).toHaveBeenCalledTimes(1);
   expect(alert).toHaveBeenCalledWith(
-    expect.objectContaining({ tag: 'break', chime: settings.sounds.breakDone, sound: settings.sound, notifications: settings.notifications }),
+    expect.objectContaining({
+      kicker: BREAK.kicker,
+      title: BREAK.over,
+      tag: 'break',
+      sticky: true,
+      chime: settings.sounds.breakDone,
+      sound: settings.sound,
+      notifications: settings.notifications,
+    }),
   );
   await settle(MINUTE_MS);
   expect(alert).toHaveBeenCalledTimes(1);
@@ -179,6 +187,19 @@ it('takes the break banners down when a timer starts, and leaves the ending to t
   expect(result.current.endsAt).toBeNull();
   await settle(5 * MINUTE_MS);
   expect(alert).not.toHaveBeenCalled();
+});
+
+it("takes Break's Over down when a break starts on another device", async () => {
+  held = [makeBreak({ startedAt: T0 - 6 * MINUTE_MS, endedAt: T0 - MINUTE_MS })];
+  const { result } = render();
+  await settle();
+  expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: BREAK.over, sticky: true }));
+  vi.mocked(dismissByTag).mockClear();
+  const at = Date.now();
+  held = [...held, makeBreak({ id: 2, startedAt: at, endedAt: at + 5 * MINUTE_MS })];
+  await settle(MINUTE_MS);
+  expect(result.current.endsAt).toBe(at + 5 * MINUTE_MS);
+  expect(dismissByTag).toHaveBeenCalledWith('break');
 });
 
 it('sends nothing to end when no break is running', async () => {

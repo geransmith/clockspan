@@ -28,6 +28,7 @@
     "seed": "tsx server/dev/seed-cli.ts",
     "screenshots": "node scripts/screenshots.mjs",
     "icons": "node scripts/icons.mjs",
+    "smoke": "sh scripts/smoke-local.sh",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.server.test.json",
     "lint": "oxlint",
     "format": "prettier --write .",

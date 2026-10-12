@@ -47,10 +47,13 @@ git switch main && git pull
   Unlabelled PRs land under "Other changes" in the notes.
 - **Body**: what changed, why, and how it was verified. A few lines is enough.
 - **Before opening**:
-  - `npm run test:coverage`, `npm run typecheck`, `npm run lint` and `npm run format:check`
-    pass locally. CI runs the same; `image-smoke` builds the image, which runs `npm run build`.
-    The coverage run fails unless every file it measures is fully covered (AGENTS.md's
-    "Verification expectations" says which); `npm run format` fixes formatting.
+  - `npm run test:coverage`, `npm run typecheck`, `npm run lint`, `npm run format:check` and
+    `npm run smoke` pass locally; CI runs the same. `npm run smoke` builds the image for amd64
+    and arm64 (which runs `npm run build`) and boots each, as `image-smoke` does. It needs
+    Docker, which is recommended, not required: without it the script says so and passes, and
+    `image-smoke` on the PR is the image's first run. The coverage run fails unless every file it
+    measures is fully covered (AGENTS.md's "Verification expectations" says which);
+    `npm run format` fixes formatting.
   - `npm run screenshots` has been re-run if a README image changed, and the PNGs of the
     changed surface are in the diff. A run on another day changes most of the others too:
     restore those.
