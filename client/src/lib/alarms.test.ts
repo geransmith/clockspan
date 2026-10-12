@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
-import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
-import { alarmTargets, describeEvent, dueEvents, eventKey, type AlarmEvent, type AlarmTarget } from './alarms';
+import { makeBreak, makeDay, makeSession, punchesAt, T0, TEST_SETTINGS, TODAY } from '../test/fixtures';
+import { alarmTargets, describeEvent, dueEvents, eventKey, missedClockIn, type AlarmEvent, type AlarmTarget } from './alarms';
 import { formatTime } from './format';
 import { patchCard } from './layout';
 import { computeTimeclock } from './timeclock';
-import type { AlarmId, AlarmSettings } from '../types';
+import type { AlarmId, AlarmSettings, Settings } from '../types';
 
 const T = new Date(2026, 8, 16, 13, 0).getTime();
 const alarms = (clock: Partial<AlarmSettings> = {}) => ({ ...TEST_SETTINGS.alarms, clockOut: { ...TEST_SETTINGS.alarms.clockOut, ...clock } });
@@ -199,6 +199,47 @@ describe('alarmTargets', () => {
     const done = tc(IN + 6 * HOUR_MS + 5 * MINUTE_MS, IN, null, null, IN + 6 * HOUR_MS);
     expect([done.state, done.lunchStatus]).toEqual(['done', 'overdue']);
     expect(armed(alarmTargets(done, s, day))).toEqual({ lunchBy: false, clockOut: false, secondMeal: false, retro: false });
+  });
+});
+
+describe('missedClockIn', () => {
+  const s = TEST_SETTINGS;
+  // A break at 8:57:30 came before the session running since 9:02:40, and no punch is set.
+  const first = T0 - 3 * MINUTE_MS;
+  const logged = makeDay(TODAY, { sessions: [makeSession({ startedAt: T0 + 2 * MINUTE_MS + 40_000 })], breaks: [makeBreak({ startedAt: first + 30_000 })] });
+  const alarmsOn = (...on: AlarmId[]) => ({
+    lunchBy: { ...s.alarms.lunchBy, enabled: on.includes('lunchBy') },
+    clockOut: { ...s.alarms.clockOut, enabled: on.includes('clockOut') },
+    secondMeal: { ...s.alarms.secondMeal, enabled: on.includes('secondMeal') },
+    retro: { ...s.alarms.retro, enabled: on.includes('retro') },
+  });
+
+  it('offers the earliest start of a session or break, floored to the minute', () => {
+    expect(missedClockIn(logged, s)).toBe(first);
+    expect(missedClockIn({ ...logged, breaks: [] }, s)).toBe(T0 + 2 * MINUTE_MS);
+  });
+
+  it('offers nothing with nothing logged or with any punch set, a Lunch out alone included', () => {
+    expect(missedClockIn(makeDay(), s)).toBeNull();
+    expect(missedClockIn({ ...logged, punches: punchesAt(null, T0) }, s)).toBeNull();
+  });
+
+  it('offers nothing with the Timeclock card hidden', () => {
+    expect(missedClockIn(logged, { ...s, layout: patchCard(s.layout, 'timeclock', { visible: false }) })).toBeNull();
+  });
+
+  it('offers it while anything counts from the clock-in, each reason on its own, and nothing otherwise', () => {
+    const only = (patch: Partial<Settings>) => missedClockIn(logged, { ...s, trackHours: false, alarms: alarmsOn(), ...patch });
+    expect(only({})).toBeNull();
+    expect(only({ trackHours: true })).toBe(first);
+    expect(only({ alarms: alarmsOn('clockOut') })).toBe(first);
+    // The meal alarms only with meal periods on, the retrospective's only with its card shown.
+    for (const id of ['lunchBy', 'secondMeal'] as const) {
+      expect(only({ alarms: alarmsOn(id) })).toBe(first);
+      expect(only({ alarms: alarmsOn(id), mealRules: false })).toBeNull();
+    }
+    expect(only({ alarms: alarmsOn('retro') })).toBe(first);
+    expect(only({ alarms: alarmsOn('retro'), layout: patchCard(s.layout, 'retro', { visible: false }) })).toBeNull();
   });
 });
 

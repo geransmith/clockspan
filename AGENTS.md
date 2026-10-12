@@ -419,9 +419,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   goes with the base of the oldest list not sent yet, so it carries every change since. That needs
   every list that takes a waiting one's place to be built on `current()`: the Priorities card
   flushes its draft and a row's note on blur, before any other sheet control acts, and
-  `setPunches` and `editPriorities` (which `addPriority` and a row's note go through) build on
-  `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the breaks
-  (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
+  `setPunches`, `editPunches` and `editPriorities` (which `addPriority` and a row's note go through)
+  build on `current()`. The day's other fields (`day:<date>`), each session (`session:<id>`) and the
+  breaks (`breaks`) queue their writes one after another (`inOrder`). `useTimer` sends the running
   session's writes one at a time on its own queue: start, adjust, edit, pause, resume, finish and
   cancel, the log's edits of the running row included. That queue is not ordered against the day
   store's `session:<id>` queue, which carries the other rows' edits and deletes. Three jobs wait
@@ -818,7 +818,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`PassFocusOnLeave`).
 - **Alarm event keys embed the target minute** (`eventKey`), so a moved target re-arms and a reload
   never re-fires. Today's fired keys live in `localStorage` under `focus:alarms`, one set for one
-  date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none.
+  date (`readDaySet`, `addToDaySet` in `lib/storage.ts`), so a new day starts with none. The
+  missed clock-in banner's key, `clockIn:missing`, sits in the same set with no minute, so that
+  banner shows once a day per device.
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another
