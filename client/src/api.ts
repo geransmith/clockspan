@@ -9,6 +9,8 @@ import type {
   Day,
   ErrorResponse,
   LogoutResponse,
+  Meeting,
+  MeetingsResponse,
   OfferResponse,
   OkResponse,
   OpenLane,
@@ -212,6 +214,9 @@ export const putPriorities = (date: string, priorities: Priority[], base: Priori
   request<PrioritiesResponse>('PUT', `/api/days/${date}/priorities`, { priorities, base });
 export const putOvertime = (date: string, approved: boolean) => request<OvertimeResponse>('PUT', `/api/days/${date}/overtime`, { approved });
 export const putSnooze = (date: string, alarm: AlarmId, until: number) => request<SnoozeResponse>('PUT', `/api/days/${date}/snooze`, { alarm, until });
+/** One meeting on the day by its uid, or null to take it off the day; the day's other meetings stay. */
+export const putMeeting = (date: string, uid: string, meeting: Meeting | null) =>
+  request<MeetingsResponse>('PUT', `/api/days/${date}/meetings`, { uid, meeting });
 export const putTarget = (date: string, workMinutes: number | null) => request<TargetResponse>('PUT', `/api/days/${date}/target`, { workMinutes });
 export const putRetro = (date: string, patch: RetroPatch) => request<RetroResponse>('PUT', `/api/days/${date}/retro`, patch);
 export const putOffer = (date: string) => request<OfferResponse>('PUT', `/api/days/${date}/offer`);

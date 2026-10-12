@@ -162,7 +162,8 @@ hand-made ones included, then writes the last 10 weekdays and today. The last we
 out/in pair and "Reply to the recruiter" added mid-day, in no category; then come a normal, an
 overtime, an unreviewed and a half day, recurring further back (`kindForDistance`). Today is
 clocked in two hours before *now*, with the last weekday's first open one-off carried to row 1 (the
-same task), row 2 ticked, and a log of sessions and breaks. One-off tasks on a list have no lane;
+same task), row 2 ticked, a log of sessions and breaks, and a 45-minute "Customer call" 30 minutes
+from now (none when it would run past midnight). One-off tasks on a list have no lane;
 four were captured on the board, three in Later and "Follow up on the Acme SLA" in Next. Two tasks
 have a note (`NOTE_OF`): "Write a KB for the SSO reset", in Later, and today's row 3, "Answer the
 two open support threads", on two lines. The board has four categories (`SEEDED_CATEGORIES`) and
@@ -405,6 +406,12 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `suggestBreaks` on, `useBreak` offers today's suggestion on the Break button and as a quiet banner
   off `useTimer().finished`, which only a finish by hand sets (Finish, Done, the finish choice, −
   past the time worked), never the auto-finish or another device.
+- **A meeting is a block on a day** (`Day.meetings`, the `days.meetings` JSON): time at work that is
+  neither focus nor rest, a uid to `{ title, startsAt, endsAt }`, or null for one taken off the day.
+  `PUT /days/:date/meetings` sets one uid and keeps the others, as the snooze route sets one alarm,
+  so two devices editing different meetings both land; the server stores the title as `meetingTitle`
+  (`shared/text.ts`) gives it, which the day store's `setMeeting` shows at once. A day holds at most
+  `MEETINGS_PER_DAY` keys, null ones included, and the prune takes them with their day.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`

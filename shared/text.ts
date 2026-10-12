@@ -34,6 +34,11 @@ export function taskTitle(text: string): string {
   return cutText(text.trim(), LIMITS.priorityText).trim();
 }
 
+/** A meeting's title as it is stored: trimmed and cut to `LIMITS.meetingTitle`, with no space left at the cut. */
+export function meetingTitle(text: string): string {
+  return cutText(text.trim(), LIMITS.meetingTitle).trim();
+}
+
 /**
  * A task's note as it is stored: control characters dropped but for line breaks and tabs, cut to
  * `LIMITS.itemNote`, a surrogate left alone (one the cut split included) replaced, and never

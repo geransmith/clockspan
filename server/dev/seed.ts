@@ -280,7 +280,7 @@ type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<Seeded
 function insertDay(db: DB, userId: number, day: DayDraft, items: ReadonlyMap<string, number>): SeededDay {
   const info = db
     .prepare(
-      `INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes, snoozed_until, offer_answered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes, snoozed_until, offer_answered_at, meetings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       userId,
@@ -292,6 +292,7 @@ function insertDay(db: DB, userId: number, day: DayDraft, items: ReadonlyMap<str
       day.workMinutes,
       JSON.stringify(day.snoozedUntil),
       day.offerAnsweredAt,
+      JSON.stringify(day.meetings),
     );
   const dayId = Number(info.lastInsertRowid);
   const punch = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
@@ -396,7 +397,7 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
     return row ? [ranOver(completed(row, startedAt, 25), 9)] : [];
   };
 
-  const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null, snoozedUntil: {}, offerAnsweredAt: null };
+  const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null, snoozedUntil: {}, offerAnsweredAt: null, meetings: {} };
 
   if (kind === 'extraPair') {
     // An extra out/in pair in the afternoon (positions 3-4) pushes the clock out to position 5.
@@ -561,6 +562,9 @@ function buildToday(today: string, now: number, running: boolean, last: Pick<Day
     completed('Inbox', clockIn + 70 * MINUTE_MS, 25, 22, 8),
   ].filter((s) => s.endedAt! <= until);
   if (running) sessions.push({ ...completed(priorities[2]!, runningFrom, 25), endedAt: null, stoppedAt: null, status: 'running' });
+  // A call booked for later today, on the minute; none when a late run would push it past midnight.
+  const callAt = Math.floor((now + 30 * MINUTE_MS) / MINUTE_MS) * MINUTE_MS;
+  const call = { title: 'Customer call', startsAt: callAt, endsAt: callAt + 45 * MINUTE_MS };
   return {
     date: today,
     kind: 'today',
@@ -569,6 +573,7 @@ function buildToday(today: string, now: number, running: boolean, last: Pick<Day
     workMinutes: null,
     snoozedUntil: {},
     offerAnsweredAt: null,
+    meetings: call.endsAt < atTime(today, 23, 59) ? { seedcall00000001: call } : {},
     punches: punchRows([clockIn, null, null, null]),
     priorities,
     sessions,

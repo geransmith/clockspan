@@ -27,13 +27,16 @@ import {
 import { startBreak } from './breaks.js';
 import { startSession } from './sessions.js';
 import { FREE_ROW, mergePriorities } from '../../shared/priorities.js';
-import { cutText, taskNote, taskTitle } from '../../shared/text.js';
+import { cutText, meetingTitle, taskNote, taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
 import { ALARM_IDS, MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
   emptyDay,
   LIMITS,
+  MEETINGS_PER_DAY,
   type Day,
+  type Meeting,
+  type MeetingsResponse,
   type OfferResponse,
   type OvertimeResponse,
   type PrioritiesResponse,
@@ -269,6 +272,20 @@ type ChildRows = ReturnType<typeof rangeRows>;
 /** A day's snoozes as stored: JSON of alarm id to epoch ms, written only by `PUT /:date/snooze`. */
 const snoozes = (day: DayRow): Day['snoozedUntil'] => JSON.parse(day.snoozed_until) as Day['snoozedUntil'];
 
+/** A day's meetings as stored: JSON of uid to a meeting or null, written only by `PUT /:date/meetings`. */
+const meetingsOf = (day: DayRow): Day['meetings'] => JSON.parse(day.meetings) as Day['meetings'];
+
+/** A meeting the client sent for the day `window` belongs to, or null to take one off it. */
+function parseMeeting(raw: unknown, window: { from: number; to: number }): { meeting: Meeting | null } | { error: string } {
+  if (raw === null) return { meeting: null };
+  if (!isRow(raw)) return { error: 'meeting must be { title, startsAt, endsAt } or null.' };
+  if (typeof raw.title !== 'string') return { error: 'title must be text.' };
+  const startsAt = parseInstant(raw.startsAt, window.from, window.to);
+  const endsAt = parseInstant(raw.endsAt, window.from, window.to);
+  if (startsAt == null || endsAt == null || endsAt <= startsAt) return { error: 'startsAt and endsAt must be times on that day, the end after the start.' };
+  return { meeting: { title: meetingTitle(raw.title), startsAt, endsAt } };
+}
+
 /** The full JSON for one existing day, its child rows taken from its range's. */
 function dayJson(day: DayRow, rows: ChildRows): Day {
   const of = <T>(byDayId: Map<number, T[]>): T[] => byDayId.get(day.id) ?? [];
@@ -283,6 +300,7 @@ function dayJson(day: DayRow, rows: ChildRows): Day {
     workMinutes: day.work_minutes,
     snoozedUntil: snoozes(day),
     offerAnsweredAt: day.offer_answered_at,
+    meetings: meetingsOf(day),
     sessions: of(rows.sessions).map(sessionRowToJson),
     breaks: of(rows.breaks).map(breakRowToJson),
   };
@@ -475,6 +493,26 @@ export function daysRouter(db: DB, config: Config): Router {
     const snoozedUntil = { ...snoozes(findDay(db, user.id, date)!), [alarm]: until };
     db.prepare(`UPDATE days SET snoozed_until = ? WHERE id = ?`).run(JSON.stringify(snoozedUntil), dayId);
     res.json({ snoozedUntil } satisfies SnoozeResponse);
+  });
+
+  // One meeting key: a meeting, or null to take it off the day. The others stay, as with the
+  // snooze, so two devices editing different meetings both land.
+  r.put('/:date/meetings', (req, res) => {
+    const user = currentUser(req);
+    const { date } = req.params;
+    const { uid, meeting: raw } = req.body as { uid?: unknown; meeting?: unknown };
+    if (typeof uid !== 'string' || !UID_RE.test(uid)) return refuse(res, 400, "uid must be a meeting's id.");
+    const parsed = parseMeeting(raw, punchWindow(date));
+    if ('error' in parsed) return refuse(res, 400, parsed.error);
+    const key = uid.toLowerCase();
+    const stored = findDay(db, user.id, date);
+    const before = stored ? meetingsOf(stored) : {};
+    if (!Object.hasOwn(before, key) && Object.keys(before).length >= MEETINGS_PER_DAY) {
+      return refuse(res, 400, `A day holds at most ${MEETINGS_PER_DAY} meetings.`);
+    }
+    const meetings = { ...before, [key]: parsed.meeting };
+    db.prepare(`UPDATE days SET meetings = ? WHERE id = ?`).run(JSON.stringify(meetings), ensureDay(db, user.id, date));
+    res.json({ meetings } satisfies MeetingsResponse);
   });
 
   // This day's own work-day length (a half day, a long one); null goes back to the setting.

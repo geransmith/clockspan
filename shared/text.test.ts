@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIMITS } from './api.js';
-import { categoryName, cutText, hasNote, noteStart, sameText, taskNote, taskTitle } from './text.js';
+import { categoryName, cutText, hasNote, meetingTitle, noteStart, sameText, taskNote, taskTitle } from './text.js';
 
 describe('sameText', () => {
   it('keys text by its words, whatever the case or spacing', () => {
@@ -40,6 +40,13 @@ describe('taskTitle', () => {
     expect(taskTitle(' \t ')).toBe('');
     expect(taskTitle(`  ${'x'.repeat(LIMITS.priorityText - 1)} y`)).toBe('x'.repeat(LIMITS.priorityText - 1));
     expect(taskTitle(`${'x'.repeat(LIMITS.priorityText - 1)}😀`)).toBe(`${'x'.repeat(LIMITS.priorityText - 1)}�`);
+  });
+});
+
+describe('meetingTitle', () => {
+  it('trims and cuts a long title with no space left at the cut', () => {
+    expect(meetingTitle('  Team  sync ')).toBe('Team  sync');
+    expect(meetingTitle(`${'x'.repeat(LIMITS.meetingTitle - 1)} y`)).toBe('x'.repeat(LIMITS.meetingTitle - 1));
   });
 });
 

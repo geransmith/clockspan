@@ -188,6 +188,8 @@ export const MIGRATIONS: Migration[] = [
   `ALTER TABLE days ADD COLUMN snoozed_until TEXT NOT NULL DEFAULT '{}';`,
   // When the day's morning offer was first answered, from any device; null while unanswered.
   `ALTER TABLE days ADD COLUMN offer_answered_at INTEGER;`,
+  // The day's meetings, as JSON of uid to { title, startsAt, endsAt } or null (off this day); '{}' is none.
+  `ALTER TABLE days ADD COLUMN meetings TEXT NOT NULL DEFAULT '{}';`,
 ];
 
 export function openDatabase(dbPath: string): DB {

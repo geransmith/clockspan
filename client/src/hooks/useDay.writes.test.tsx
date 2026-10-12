@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { warnSaveFailed } from '../lib/alerts';
 import { mergePunches } from '../../../shared/punches.js';
-import { MINUTE_MS } from '../../../shared/dates.js';
+import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import {
   answered,
   apiError,
@@ -23,7 +23,19 @@ import {
   TODAY,
   YESTERDAY,
 } from '../test/hooks';
-import type { BreakEndResponse, BreakResponse, Day, OfferResponse, OkResponse, OvertimeResponse, Priority, Punch, PunchesResponse, Session } from '../types';
+import type {
+  BreakEndResponse,
+  BreakResponse,
+  Day,
+  Meeting,
+  OfferResponse,
+  OkResponse,
+  OvertimeResponse,
+  Priority,
+  Punch,
+  PunchesResponse,
+  Session,
+} from '../types';
 import { OTHER, renderStore } from './useDay.testkit';
 
 vi.mock('../api');
@@ -174,6 +186,26 @@ describe('per-day fields', () => {
     expect(result.current.days[TODAY]?.snoozedUntil).toEqual({ lunchBy: T0, clockOut: T0 + 5, secondMeal: T0 + 9 });
 
     await act(async () => expect(await result.current.setSnoozedUntil(TODAY, 'lunchBy', T0 + 7)).toBe(false));
+  });
+
+  it('setMeeting shows its meeting beside another at once, trimmed, takes the answer, and takes one off with null', async () => {
+    const standup = { title: 'Standup', startsAt: T0, endsAt: T0 + 15 * MINUTE_MS };
+    vi.mocked(api.getDay).mockResolvedValue(answered(makeDay(TODAY, { meetings: { aaaa1111: standup } })));
+    const call = { title: 'Call', startsAt: T0 + HOUR_MS, endsAt: T0 + 2 * HOUR_MS };
+    const saved = deferredAnswer<{ meetings: Record<string, Meeting | null> }>();
+    vi.mocked(api.putMeeting).mockReturnValueOnce(saved.promise).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderStore();
+    await settle();
+
+    const done = begin(() => result.current.setMeeting(TODAY, 'bbbb2222', { ...call, title: ' Call ' }));
+    expect(result.current.days[TODAY]?.meetings).toEqual({ aaaa1111: standup, bbbb2222: call });
+    // Another device took the standup off meanwhile: the route answers every meeting.
+    saved.resolve({ meetings: { aaaa1111: null, bbbb2222: call } });
+    await act(async () => expect(await done).toBe(true));
+    expect(api.putMeeting).toHaveBeenCalledWith(TODAY, 'bbbb2222', { ...call, title: ' Call ' });
+    expect(result.current.days[TODAY]?.meetings).toEqual({ aaaa1111: null, bbbb2222: call });
+
+    await act(async () => expect(await result.current.setMeeting(TODAY, 'bbbb2222', null)).toBe(false));
   });
 
   it('setRetro keeps the note and stamp it was not asked to change, then takes the stored stamp', async () => {
