@@ -757,7 +757,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   mid-day, how many got ticked, and `categoryUid`: the category more than half of them had, else
   null) and `typicalDay`: the medians, rounded half up, of the rows written and ticked on the days
   before today with a row written. Today is left out because it is still going, and it is null under
-  two such days; Review shows it for a Week or a Month. The Days tile's target is `periodTarget`: a
+  two such days; Review shows it for a Week or a Month. `typicalRuns` takes each first length
+  (`Session.firstPlannedSeconds`) with 3 or more sessions finished by hand (`ranSeconds`, which the
+  server leaves null for the auto-finish, a running or cancelled session and older rows) and gives
+  its median run, today's sessions included, for at most two lengths, the most used first; Review
+  shows it for a Week or a Month too. The Days tile's target is `periodTarget`: a
   Week's is the Work week setting, as on the timeclock's week line, and a Month's or a Quarter's is
   `targetSeconds`, the clocked-in days' own lengths added up through `daySettings` (a day out of
   order or left clocked in is left out). Not Done groups the one-off rows left open by their task

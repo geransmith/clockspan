@@ -75,10 +75,10 @@ export function startSession(db: DB): RequestHandler<{ date: string }> {
       endRunningBreak(db, user.id, now);
       const info = db
         .prepare(
-          `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status, item_id)
-           VALUES (?, ?, ?, ?, ?, NULL, 'running', ?)`,
+          `INSERT INTO sessions (day_id, user_id, label, planned_seconds, first_planned_seconds, started_at, ended_at, status, item_id)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, 'running', ?)`,
         )
-        .run(dayId, user.id, name.label ?? '', planned.seconds, now, link.itemId ?? null);
+        .run(dayId, user.id, name.label ?? '', planned.seconds, planned.seconds, now, link.itemId ?? null);
       return Number(info.lastInsertRowid);
     })();
     res.status(201).json({ session: sessionRowToJson(getOwned(db, 'sessions', user.id, id)!) } satisfies SessionResponse);
@@ -163,7 +163,9 @@ export function sessionsRouter(db: DB): Router {
   // time past the end as well (they were there for it). A session finished while paused ends
   // when the pause began (no work happened since), so the log excludes every pause. `expect` is
   // the plan and pause an automatic finish judged the row by: once another device has given it
-  // time or resumed it, it may not be due any more, so that finish is refused.
+  // time or resumed it, it may not be due any more, so that finish is refused. Any finish with
+  // `expect`, the forgotten pause's included, stores no real stop (`stopped_at`): the due one fires
+  // a grace period past the end or whenever a page next opens, so its stop measures nothing.
   r.post('/:id/finish', (req, res) => {
     const s = owned(res);
     const { countOverrun, expect } = req.body as { countOverrun?: unknown; expect?: unknown };
@@ -179,7 +181,11 @@ export function sessionsRouter(db: DB): Router {
       // The planned end as of `until`: while paused it moves forward with the clock, so read at
       // `now` it would let a pause that began after the end count the overrun anyway.
       const endedAt = countOverrun ? until : Math.min(until, plannedEndAt(timing, until));
-      db.prepare(`UPDATE sessions SET ended_at = ?, paused_at = NULL, status = 'completed' WHERE id = ?`).run(endedAt, s.id);
+      db.prepare(`UPDATE sessions SET ended_at = ?, stopped_at = ?, paused_at = NULL, status = 'completed' WHERE id = ?`).run(
+        endedAt,
+        expect ? null : until,
+        s.id,
+      );
     }
     reply(res, s.user_id, s.id);
   });

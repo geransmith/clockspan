@@ -33,6 +33,8 @@ describe('sessions', () => {
       pausedSeconds: 0,
       pausedAt: null,
       categoryUid: null,
+      firstPlannedSeconds: 1500,
+      ranSeconds: null,
     });
     const running = await app.api.get('/api/sessions/running');
     expect(running.body.session.id).toBe(r.body.session.id);
@@ -364,6 +366,71 @@ describe('sessions', () => {
     expect(done.body.session).toMatchObject({ status: 'completed', durationSeconds: 900 });
     // Over already: answered as it is, whatever it was judged by.
     expect((await finish({ expect: { plannedSeconds: 600, pausedAt: null } })).body.session.status).toBe('completed');
+  });
+
+  it('keeps the length a session started with through a longer and a shorter plan', async () => {
+    const { id } = (await start()).body.session;
+    for (const plannedSeconds of [2100, 900]) {
+      expect((await app.api.patch(`/api/sessions/${id}`, { plannedSeconds })).body.session).toMatchObject({ plannedSeconds, firstPlannedSeconds: 1500 });
+    }
+  });
+
+  it('logs the plan of a finish by hand past it, and answers the real run', async () => {
+    const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    at(17 * MINUTE_MS);
+    const r = await app.api.post(`/api/sessions/${id}/finish`);
+    expect(r.body.session).toMatchObject({ durationSeconds: 600, firstPlannedSeconds: 600, ranSeconds: 17 * 60 });
+    expect((await app.api.get(`/api/days/${DATE}`)).body.sessions[0].ranSeconds).toBe(17 * 60);
+  });
+
+  it('answers the run of a finish by hand while paused up to the pause, with every pause left out', async () => {
+    const { id } = (await start({ plannedSeconds: 600 })).body.session;
+    // Two minutes paused, so the plan runs out at 12 min; paused again at 15 and finished at 40.
+    at(MINUTE_MS);
+    await app.api.post(`/api/sessions/${id}/pause`);
+    at(3 * MINUTE_MS);
+    await app.api.post(`/api/sessions/${id}/resume`);
+    at(15 * MINUTE_MS);
+    await app.api.post(`/api/sessions/${id}/pause`);
+    at(40 * MINUTE_MS);
+    const r = await app.api.post(`/api/sessions/${id}/finish`);
+    expect(r.body.session).toMatchObject({ durationSeconds: 600, ranSeconds: 13 * 60 });
+  });
+
+  it('answers no run for an automatic finish, due or paused, and a later finish by hand changes nothing', async () => {
+    const due = (await start({ plannedSeconds: 600 })).body.session;
+    at(20 * MINUTE_MS);
+    const auto = await app.api.post(`/api/sessions/${due.id}/finish`, { expect: { plannedSeconds: 600, pausedAt: null } });
+    expect(auto.body.session).toMatchObject({ status: 'completed', firstPlannedSeconds: 600, ranSeconds: null });
+    expect((await app.api.post(`/api/sessions/${due.id}/finish`)).body.session.ranSeconds).toBeNull();
+    // A pause left too long, finished hours later.
+    const paused = (await start({ plannedSeconds: 600 })).body.session;
+    at(25 * MINUTE_MS);
+    await app.api.post(`/api/sessions/${paused.id}/pause`);
+    at(3 * HOUR_MS);
+    const left = await app.api.post(`/api/sessions/${paused.id}/finish`, { expect: { plannedSeconds: 600, pausedAt: SEED_NOW + 25 * MINUTE_MS } });
+    expect(left.body.session).toMatchObject({ status: 'completed', firstPlannedSeconds: 600, ranSeconds: null });
+    expect((await app.api.post(`/api/sessions/${paused.id}/finish`)).body.session.ranSeconds).toBeNull();
+  });
+
+  it('answers no run for a cancelled session', async () => {
+    const { id } = (await start()).body.session;
+    at(5 * MINUTE_MS);
+    expect((await app.api.post(`/api/sessions/${id}/cancel`)).body.session).toMatchObject({ status: 'cancelled', firstPlannedSeconds: 1500, ranSeconds: null });
+  });
+
+  it('reads a session stored before its first length and stop were as having neither', async () => {
+    const { id } = (await start()).body.session;
+    at(5 * MINUTE_MS);
+    await app.api.post(`/api/sessions/${id}/finish`);
+    app.db
+      .prepare(
+        `INSERT INTO sessions (day_id, user_id, label, planned_seconds, started_at, ended_at, status)
+         SELECT day_id, user_id, 'Old', 600, started_at, ended_at, 'completed' FROM sessions WHERE id = ?`,
+      )
+      .run(id);
+    const sessions = (await app.api.get(`/api/days/${DATE}`)).body.sessions as { label: string }[];
+    expect(sessions.find((x) => x.label === 'Old')).toMatchObject({ durationSeconds: 300, firstPlannedSeconds: null, ranSeconds: null });
   });
 
   it('finishes early with the elapsed time', async () => {
