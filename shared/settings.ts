@@ -47,7 +47,7 @@ export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   return out;
 }
 
-export const ALARM_IDS = ['lunchBy', 'clockOut', 'secondMeal', 'retro'] as const;
+export const ALARM_IDS = ['lunchBy', 'clockOut', 'secondMeal', 'retro', 'noBreak'] as const;
 export type AlarmId = (typeof ALARM_IDS)[number];
 
 /** How times are written: the browser locale's way, or 12-hour / 24-hour regardless. */
@@ -83,7 +83,7 @@ export interface Settings {
   /** Single-key shortcuts (`client/src/lib/shortcuts.ts`); off for anyone a stray key gets in the way of (WCAG 2.1.4). */
   shortcuts: boolean;
   adjustStepMinutes: number;
-  /** The focus timer's Break button: how long a break runs, in minutes. */
+  /** The focus timer's Break button: how long a break runs, in minutes. The break alarm's Start Break runs it too. */
   breakMinutes: number;
   /**
    * After a session finished by hand, a banner offers a break sized to it on the Pomodoro
@@ -166,6 +166,8 @@ export const ALARM_LIMITS = {
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
 // The retrospective is one nudge before the day ends, not a deadline: no repeat by default.
 const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };
+// The break alarm has no warnings, and a rest taken without the Break button isn't seen, so it repeats only hourly.
+const DEFAULT_NO_BREAK_ALARM: AlarmSettings = { enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 60 };
 
 /** Frozen all the way down: both sides hand this object out as-is when there is nothing to merge. */
 function deepFreeze<T>(value: T): T {
@@ -212,7 +214,13 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   showWeekends: true,
   clockBar: true,
   recurringPerDay: 3,
-  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
+  alarms: {
+    lunchBy: { ...DEFAULT_ALARM },
+    clockOut: { ...DEFAULT_ALARM },
+    secondMeal: { ...DEFAULT_ALARM },
+    retro: { ...DEFAULT_RETRO_ALARM },
+    noBreak: { ...DEFAULT_NO_BREAK_ALARM },
+  },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },
 });

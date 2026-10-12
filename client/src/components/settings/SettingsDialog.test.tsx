@@ -236,6 +236,36 @@ describe('SettingsDialog', () => {
     expect(hint('Retrospective')).not.toContain('Overtime approval');
   });
 
+  it('shows the Break alarm last with no warnings and an hourly repeat, with the meal periods on or off', async () => {
+    await renderDialog();
+    await openTab('Alarms');
+    const breakAlarm = () => screen.getByRole('group', { name: 'Break', hidden: true });
+    const groups = screen.getAllByRole('group', { hidden: true }).filter((g) => g.classList.contains('alarm-editor'));
+    expect(groups.at(-1)).toBe(breakAlarm());
+    expect(within(breakAlarm()).queryByRole('group', { name: 'Warn before', hidden: true })).toBeNull();
+    const repeat = within(breakAlarm()).getByRole('combobox', { name: 'Repeat while over', hidden: true });
+    expect(within(repeat).getByRole('option', { name: 'Every 60 min', hidden: true })).toBeTruthy();
+    expect(hint('Break')).toBe(
+      'Rings after 90 minutes without a break, counted from your last break or your last In punch. Waits while a timer or a break runs.',
+    );
+    expect(document.getElementById(toggle('Break').getAttribute('aria-describedby')!)!.title).toBe(
+      'Stays quiet from 30 min before a lunch or clock-out deadline until lunch is taken, the day ends or overtime is approved.',
+    );
+    expect(
+      screen.getByText(
+        'Alerts as lunch, clock-out and the second meal period approach, a nudge to look back before the day ends, and one after 90 minutes without a break.',
+      ),
+    ).toBeTruthy();
+    await openTab('Timeclock');
+    fireEvent.click(toggle('Meal periods'));
+    await settle();
+    await openTab('Alarms');
+    expect(breakAlarm()).toBeTruthy();
+    expect(
+      screen.getByText('Alerts as clock-out approaches, a nudge to look back before the day ends, and one after 90 minutes without a break.'),
+    ).toBeTruthy();
+  });
+
   it('saves one alarm field or one sound without touching the others', async () => {
     await renderDialog();
     await openTab('Alarms');

@@ -6,13 +6,13 @@ A self-hosted, single-day **focus sheet** for working through a workday with ADH
 timeclock (lunch deadline, end of day, celebration), top priorities (default three, with a
 nudge when the list grows), a focus timer that logs what was done and for which priority, a
 retrospective card (plan vs. log, a "why" note, a nudge before clock-out; folded to an Open
-button until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out and
-the second meal period, and a Board page for tasks that aren't for today (its In Progress column
-is today's Top Priorities; tasks carry categories, made from a chip or in Settings → Board, and
-any card can be set to repeat on weekdays from its dialog, which makes it a recurring priority:
-listed under Later's Repeats and offered on Top Priorities on those days). Each task (a
-priority, a board card, a recurring priority) is stored once, with one name, one category and
-one note; a day's list names the tasks on it.
+button until the day is clocked out), a week / month / quarter review, alarms for lunch, clock-out,
+the second meal period and 90 minutes without a break, and a Board page for tasks that aren't for
+today (its In Progress column is today's Top Priorities; tasks carry categories, made from a chip
+or in Settings → Board, and any card can be set to repeat on weekdays from its dialog, which makes
+it a recurring priority: listed under Later's Repeats and offered on Top Priorities on those days).
+Each task (a priority, a board card, a recurring priority) is stored once, with one name, one
+category and one note; a day's list names the tasks on it.
 "Overtime approved" silences the clock-out alarm only. Every day is persisted; old days can be
 pruned. Data is **per user**; auth is optional (`AUTH_MODE=none | local | oidc`). One Docker
 container, SQLite on `/data`. A PWA used mostly on a laptop or desktop and laid out for phones
@@ -356,7 +356,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
 - **Today's day is kept in step with the server** (`useRefreshDay` in `useDay.tsx`, on
   `useRefreshLoop`: every minute and when the tab comes back, throttled to 5 s per caller, and at
   once when another tab or device saves a change), so the alarms in `useTodayAlarms` judge the
-  server's copy of the punches, not one from hours ago; they wait while a come-back refresh is out.
+  server's copy of the punches, breaks and sessions, not one from hours ago; they wait while a
+  come-back refresh is out.
   Break's Over waits the same way on `useBreak`'s own loop, which reads the day the break is on
   (yesterday's for a break from before midnight, while it can still ring). A today whose first load
   failed is loaded again on the same ticks, so its alarms come back with the server. The sheet on
@@ -416,7 +417,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   button's key, goes through the same `run`), since a break write goes out on the day store's
   queue, not the timer's, and the two could reach the server in either order; for the same reason
   a session start takes the break banners down in its tap (`dismissByTag('break')`, in
-  `TimerLengths`), whose Start Break those buttons don't cover.
+  `TimerLengths`), whose Start Break those buttons don't cover, and the break alarm's banner with
+  them (`ALARM_TAG + 'noBreak'`), whose Start Break goes on the day store's queue too and does
+  nothing while `useTimer().starting`.
 - **Saves reach the server in the order they were made**, each store's on its own queue (`serial()`
   in `lib/optimistic.ts`, made by `useTracked`). In the day store, `setPunches` and `setPriorities`
   send a whole list, so one PUT per list and day is in flight and only the newest waiting list
@@ -484,8 +487,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   Lunch and the second meal period stay armed: California Labor Code §512 still requires them
   on an overtime day. Approval also arms the second meal on a day whose work day doesn't pass
   its threshold: `secondMealApplies` counts an approved day as one that will pass it, so the
-  alarm and the card's note start when the switch is set, not when the day runs over. The
-  setting `overtimeApproval` shows/hides the switch and banner button (a warning for a Clock out
+  alarm and the card's note start when the switch is set, not when the day runs over. It also
+  lifts the break alarm's hold, since that alarm reads `clockOut`'s armed flag (`alarmTargets`).
+  The setting `overtimeApproval` shows/hides the switch and banner button (a warning for a Clock out
   typed ahead has none, since that day ends at the typed time: `useAlarms`), and with it off the
   Clock Out At tile (and the board's clock bar, which takes its words) reads time past the day as
   "past your day" rather than a red "Over by" (the sheet's tile leaves its line to the card's pill
@@ -1034,11 +1038,12 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   from `lib/alerts.ts`, raised only once `useSettings().loaded` is true (see "Nothing alerts
   before the settings have loaded"), or through a `useCelebration(moment, '<event>')` for a
   moment worth a burst; never through a bare `playSound`.
-- **An alarm target**: expose the instant from `computeTimeclock` → add a target to
-  `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule and a test case (a rule the card also
-  needs goes in a pure helper like `secondMealApplies`) → add its id to `ALARM_IDS` and its
-  default under `alarms` in `shared/settings.ts` (`mergeSettings` and `applySettingsPatch` loop
-  over `ALARM_IDS`, so neither needs a line) → add an `AlarmEditor` in `settings/AlarmsTab.tsx`,
+- **An alarm target**: expose the instant from `computeTimeclock`, or from a pure helper over the
+  day's rows passed in on `TargetDay` (as the break alarm's `lastBreakEnd`, `lib/breaks.ts`, is) →
+  add a target to `alarmTargets()` in `lib/alarms.ts`, with an `armed` rule and a test case (a rule
+  the card also needs goes in a pure helper like `secondMealApplies`) → add its id to `ALARM_IDS`
+  and its default under `alarms` in `shared/settings.ts` (`mergeSettings` and `applySettingsPatch`
+  loop over `ALARM_IDS`, so neither needs a line) → add an `AlarmEditor` in `settings/AlarmsTab.tsx`,
   and its name in that Alarms section's hint (both variants) → its name in `ALARM_NAMES`
   (`lib/alarms.ts`) is the banner's whole kicker, and its `case` in `describeEvent()` there (the
   `switch-exhaustiveness-check` lint refuses a missing one) needs a title for each kind that says

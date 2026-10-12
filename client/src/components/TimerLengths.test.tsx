@@ -34,7 +34,7 @@ describe('TimerLengths', () => {
     expect(lengths()).toEqual(['25min', '50min']);
   });
 
-  it('unlocks the sound, asks for notifications and takes the break banners down in the tap, before the start', async () => {
+  it("unlocks the sound, asks for notifications and takes the break banners and the break alarm's down in the tap, before the start", async () => {
     const onStart = await renderLengths([25]);
     fireEvent.click(screen.getByRole('button', { name: /^25\s*min$/ }));
     expect(onStart).toHaveBeenCalledExactlyOnceWith(25);
@@ -44,8 +44,8 @@ describe('TimerLengths', () => {
     expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
     expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeGreaterThan(unlocked);
     expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeLessThan(started);
-    expect(dismissByTag).toHaveBeenCalledExactlyOnceWith('break');
-    expect(vi.mocked(dismissByTag).mock.invocationCallOrder[0]).toBeLessThan(started);
+    expect(vi.mocked(dismissByTag).mock.calls).toEqual([['break'], ['alarm:noBreak']]);
+    expect(vi.mocked(dismissByTag).mock.invocationCallOrder[1]).toBeLessThan(started);
   });
 
   it('sends nothing while disabled', async () => {

@@ -1,5 +1,6 @@
-import type { AlarmId, AlarmSettings, CardId, Day, Settings } from '../types';
+import type { AlarmId, AlarmSettings, Break, CardId, Day, Settings } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
+import { lastBreakEnd, runningBreak } from './breaks';
 import { floorToMinute, formatMinutes, formatTime } from './format';
 import { secondMealApplies, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
@@ -13,12 +14,21 @@ export interface AlarmTarget {
 
 const cardShown = (layout: Settings['layout'], id: CardId) => layout.some((l) => l.id === id && l.visible);
 
-/** The day's own switches that disarm a target. */
+/** The break alarm rings this long after the last rest. */
+export const NO_BREAK_MINUTES = 90;
+/** The break alarm holds from this long before an armed lunch or clock-out deadline. */
+export const BREAK_HOLD_MINUTES = 30;
+
+/** What of the day besides its punches arms a target: its own switches, its breaks and a running session. */
 export interface TargetDay {
   /** Silences the clock-out target only. */
   overtimeApproved: boolean;
   /** Today's retrospective has been marked reviewed. */
   retroDone: boolean;
+  /** Today's breaks, by start. */
+  breaks: readonly Break[];
+  /** A session runs on today's sheet, paused or due included. */
+  timerRunning: boolean;
 }
 
 /**
@@ -35,11 +45,18 @@ export interface TargetDay {
  * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
  * banner's button and Mark Reviewed are on the card. A typed Clock out moves the end earlier, never
  * later, so a day running past the planned end still warns.
+ *
+ * The break alarm's target is `NO_BREAK_MINUTES` after the last rest: the later of the In punch the
+ * clock reached last and the end of the last break over by `now`. It moves only when a rest
+ * happens, never with the clock. It is armed while working with the punches in order and no break
+ * or session running, so a target passed during a timer rings once it is finished. It holds from
+ * `BREAK_HOLD_MINUTES` before an armed lunch or clock-out deadline (armed, whatever their own
+ * switches say) until lunch is taken, the day ends or overtime is approved.
  */
-export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
+export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay, now: number): AlarmTarget[] {
   const endFixed = !tc.outOfOrder && tc.state === 'working';
   const end = Math.min(tc.clockOutAt ?? 0, tc.typedClockOut ?? Infinity);
-  return [
+  const targets: AlarmTarget[] = [
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
@@ -49,6 +66,14 @@ export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & 
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
     { id: 'retro', at: end, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
   ];
+  const since = tc.workingSince;
+  const held = targets.some((t) => (t.id === 'lunchBy' || t.id === 'clockOut') && t.armed && now >= t.at - BREAK_HOLD_MINUTES * MINUTE_MS);
+  targets.push({
+    id: 'noBreak',
+    at: since == null ? 0 : Math.max(since, lastBreakEnd(day.breaks, now) ?? since) + NO_BREAK_MINUTES * MINUTE_MS,
+    armed: endFixed && !runningBreak(day.breaks, now) && !day.timerRunning && !held,
+  });
+  return targets;
 }
 
 /**
@@ -170,6 +195,7 @@ const ALARM_NAMES: Record<AlarmId, string> = {
   clockOut: 'Clock-out alarm',
   secondMeal: 'Second meal alarm',
   retro: 'Retrospective',
+  noBreak: 'Break alarm',
 };
 
 /**
@@ -277,5 +303,15 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         body: `Your day ended at ${target}. You're working past your ${day} target.`,
         tone: 'danger',
       };
+    case 'noBreak': {
+      // Counted to now, not to the event, so a banner raised late (a timer ran past the target) says the real time.
+      const since = e.target - NO_BREAK_MINUTES * MINUTE_MS;
+      return {
+        kicker,
+        title: `${formatMinutes(Math.floor((ctx.now - since) / MINUTE_MS))} Without a Break`,
+        body: `Working since ${formatTime(since, ctx.hour12)}.`,
+        tone: 'warn',
+      };
+    }
   }
 }

@@ -59,6 +59,15 @@ export function runningBreak(breaks: readonly Break[], now: number): Break | nul
   return last && last.endedAt > now ? last : null;
 }
 
+/**
+ * When the latest break that has ended by `now` ended (the complement of `runningBreak`); null with
+ * none. Only a logged break counts as rest here: sessions, and the gaps between them, don't, unlike
+ * `suggestBreak`'s `SET_GAP_MINUTES`.
+ */
+export function lastBreakEnd(breaks: readonly Break[], now: number): number | null {
+  return breaks.filter((b) => b.endedAt <= now).at(-1)?.endedAt ?? null;
+}
+
 function breakMinutes(focusSeconds: number): number {
   return Math.min(MAX_BREAK_MINUTES, Math.max(BREAK_SECONDS.min / 60, Math.round(focusSeconds / 60 / BREAK_RATIO)));
 }

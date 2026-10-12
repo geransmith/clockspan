@@ -51,6 +51,16 @@ describe('mergeSettings', () => {
     expect(mergeSettings(stored, { sound: false }).layout).toBe(merged);
   });
 
+  it('gives alarms stored before the break alarm existed the break alarm at its default, on', () => {
+    const { noBreak: _, ...stored } = DEFAULT_SETTINGS.alarms;
+    expect(mergeSettings(DEFAULT_SETTINGS, { alarms: stored }).alarms.noBreak).toEqual({
+      enabled: true,
+      leadMinutes: [],
+      onDue: true,
+      overdueEveryMinutes: 60,
+    });
+  });
+
   it('keeps retention within bounds, field by field', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: true, days: 90 } }).retention).toEqual({ enabled: true, days: 90 });
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: { enabled: 'yes', days: 7 } }).retention).toEqual(DEFAULT_SETTINGS.retention);

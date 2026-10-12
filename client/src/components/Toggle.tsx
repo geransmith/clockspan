@@ -4,12 +4,15 @@ import { useId } from 'react';
 export function Toggle({
   label,
   hint,
+  hintTitle,
   checked,
   onChange,
   className,
 }: {
   label: string;
   hint?: string;
+  /** A tooltip on the hint. */
+  hintTitle?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   /** Added to the row's own class, for a row placed outside the settings dialog. */
@@ -23,7 +26,7 @@ export function Toggle({
       <span className="toggle-text">
         <span id={`${id}-label`}>{label}</span>
         {hint && (
-          <span id={`${id}-hint`} className="muted small">
+          <span id={`${id}-hint`} className="muted small" title={hintTitle}>
             {hint}
           </span>
         )}
