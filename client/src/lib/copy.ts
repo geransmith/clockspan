@@ -248,6 +248,8 @@ export const MEETING = {
   running: (title: string, until: string) => (title ? `In ${title} until ${until}` : `In a meeting until ${until}`),
   notAfterNow: 'Pick a time after now.',
   tooFar: 'Pick a time within 4 hours.',
+  freeUntil: (title: string, at: string) => (title ? `Free until ${title} at ${at}` : `Free until ${at}`),
+  runsInto: (title: string, at: string) => (title ? `Runs into ${title} at ${at}` : `Runs into a meeting at ${at}`),
 } as const;
 
 /**

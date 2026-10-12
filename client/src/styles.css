@@ -1682,6 +1682,19 @@ button {
 .timer-until .timefield {
   width: auto;
 }
+.timer-free {
+  margin: 0;
+  text-align: center;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.timer-free strong {
+  color: var(--text);
+}
+/* A length that runs into the next meeting: muted, still started on a tap, so its text keeps 4.5:1. */
+.btn-quick--over {
+  color: var(--text-2);
+}
 .timer-until-error {
   flex-basis: 100%;
   margin: 0;

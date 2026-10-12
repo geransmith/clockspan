@@ -93,3 +93,8 @@ export function defaultUntil(now: number): number {
 export function meetingAt(rows: readonly MeetingRow[], now: number): MeetingRow | null {
   return rows.find((r) => !r.skipped && r.meeting.startsAt <= now && now < r.meeting.endsAt) ?? null;
 }
+
+/** The next meeting to start after `now` among a day's rows, skipped ones aside; null with none left. */
+export function nextMeeting(rows: readonly MeetingRow[], now: number): MeetingRow | null {
+  return rows.find((r) => !r.skipped && r.meeting.startsAt > now) ?? null;
+}

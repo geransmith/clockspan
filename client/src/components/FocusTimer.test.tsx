@@ -743,6 +743,27 @@ describe('FocusTimer', () => {
       expect(document.activeElement).toBe(screen.getByRole('button', { name: MEETING.end }));
     });
 
+    it('says how long is free until the next meeting, and mutes the lengths that run into it', async () => {
+      held = { a: { title: 'Standup', startsAt: at(20), endsAt: at(35) }, b: { title: '', startsAt: at(60), endsAt: at(90) } };
+      await renderCard([], [], null, { meetings: held });
+      expect(screen.getByText(/^Free until Standup at 9:20 AM ·/).textContent).toBe('Free until Standup at 9:20 AM · 20m');
+      const length = (m: number) => screen.getByRole('button', { name: new RegExp(`^${m}\\s*min$`) });
+      expect(length(15).title).toBe('');
+      expect(length(25).title).toBe('Runs into Standup at 9:20 AM');
+      expect(length(25).classList).toContain('btn-quick--over');
+      // In the meeting the line goes; after it, the next one's untitled line comes.
+      vi.setSystemTime(at(21));
+      await settle(1000);
+      expect(screen.queryByText(/^Free until/)).toBeNull();
+      vi.setSystemTime(at(40));
+      await settle(1000);
+      // A second past 9:40, by the tick: whole minutes left, as the duration counts them.
+      expect(screen.getByText(/^Free until 10:00 AM ·/).textContent).toBe('Free until 10:00 AM · 19m');
+      vi.setSystemTime(at(95));
+      await settle(1000);
+      expect(screen.queryByText(/^Free until/)).toBeNull();
+    });
+
     it('offers no Meeting off today', async () => {
       await renderCard([], [], null, { isToday: false });
       expect(screen.queryByRole('button', { name: MEETING.start })).toBeNull();

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import type { WeeklyMeeting } from '../types';
-import { changeWeekly, currentPart, dayMeetings, defaultUntil, meetingAt, minuteOfDay, occurrence, renameWeekly, stopWeekly } from './meetings';
+import { changeWeekly, currentPart, dayMeetings, defaultUntil, meetingAt, minuteOfDay, nextMeeting, occurrence, renameWeekly, stopWeekly } from './meetings';
 
 // 2026-10-12 is a Monday.
 const MON = '2026-10-12';
@@ -123,5 +123,14 @@ describe('meetingAt', () => {
     expect(meetingAt(rows, at(MON, 9, 30))?.uid).toBe('a');
     expect(meetingAt(rows, at(MON, 10))).toBeNull();
     expect(meetingAt(rows, at(MON, 9) - MINUTE_MS)).toBeNull();
+  });
+});
+
+describe('nextMeeting', () => {
+  it('finds the first meeting to start after a time, leaving out a skipped one', () => {
+    const rows = dayMeetings(MON, { a: call(9), c: call(11), stand000: null }, [{ ...STANDUP, start: 600, end: 615 }]);
+    expect(nextMeeting(rows, at(MON, 8))?.uid).toBe('a');
+    expect(nextMeeting(rows, at(MON, 9))?.uid).toBe('c');
+    expect(nextMeeting(rows, at(MON, 11))).toBeNull();
   });
 });

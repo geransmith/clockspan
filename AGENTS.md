@@ -436,7 +436,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   `MEETING_UNTIL_MAX_MINUTES`), and Start Meeting adds a one-off from the minute on the one-second
   clock under the label box's text and ends a running break. While a meeting is on (`meetingAt`, any
   kind) the card shows it with End Meeting, which ends it now; one under a minute is cleared (a
-  weekly one skipped). The focus moves as a break's does.
+  weekly one skipped). The focus moves as a break's does. Otherwise, with one still to come today
+  (`nextMeeting`), the card says how long is free until it ("Free until Standup at 9:30 AM · 1h 25m",
+  before a Clock in too) and mutes the lengths that would run into it (`TimerLengths`' `over`, with
+  the reason as their title), which still start.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`
