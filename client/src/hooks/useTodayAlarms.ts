@@ -4,7 +4,8 @@ import { punchesKey } from '../../../shared/punches.js';
 import { missedClockIn } from '../lib/alarms';
 import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
-import { daySettings, dayTimeclock, overtimeOn } from '../lib/timeclock';
+import { floorToMinute } from '../lib/format';
+import { daySettings, dayTimeclock, LUNCH_IN_POSITION, overtimeOn } from '../lib/timeclock';
 import { useAlarms } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
 import { useSettings } from './useSettings';
@@ -43,6 +44,9 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   // Nothing is memoized: Shell renders every second and useAlarms' effect runs on each tick anyway.
   const workMinutes = day?.workMinutes ?? null;
   const tc = punches ? dayTimeclock({ date: today, punches, workMinutes }, settings, today, now) : null;
+  // A banner's punch, only while its row is empty: one that reached this page before the press stands.
+  const fill = (position: number, at: number) =>
+    void store.editPunches(today, (rows) => (rows[position]?.at === null ? rows.map((p) => (p.position === position ? { ...p, at } : p)) : null));
   useAlarms(today, tc, daySettings(settings, { workMinutes }), now, {
     overtimeApproved: overtimeOn(settings, Boolean(day?.overtimeApproved)),
     retroDone: Boolean(day?.retroAt),
@@ -53,8 +57,12 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
       unlockAudio();
       // No `loaded &&`: the banner waits for `tc`, which waits for the settings.
       offerNotifications(settings.notifications);
-      // Only while Clock in is empty: one that reached this page before the press stands.
-      void store.editPunches(today, (rows) => (rows[0]?.at === null ? rows.map((p) => (p.position === 0 ? { ...p, at } : p)) : null));
+      fill(0, at);
+    },
+    lunchInNow: () => {
+      unlockAudio();
+      // The minute of the press, as the card's Now: the banner may have been up for a while.
+      fill(LUNCH_IN_POSITION, floorToMinute(Date.now()));
     },
   });
   // Up while the failure is out of sight: it goes once today loads, a view shows it, or the date changes.

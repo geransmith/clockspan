@@ -21,7 +21,7 @@ interface Props {
   day: AlarmDayState;
   settings: Settings;
 }
-const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn(), missedClockIn: null, clockInAt: vi.fn() };
+const NO_DAY: AlarmDayState = { overtimeApproved: false, retroDone: false, openRetro: vi.fn(), missedClockIn: null, clockInAt: vi.fn(), lunchInNow: vi.fn() };
 
 function renderAlarms(props: Partial<Props> = {}) {
   const initialProps: Props = { date: TODAY, tc: null, now: T0, day: NO_DAY, settings, ...props };
@@ -95,20 +95,30 @@ describe('firing', () => {
 });
 
 describe('lunch end', () => {
-  it('rings when lunch is over and replaces that banner with each repeat, so they never stack', () => {
-    // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ends now.
-    const lunchAt = (now: number) => tcAt(now, T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS);
-    const { rerender } = renderAlarms({ tc: lunchAt(T0) });
+  // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ends at T0.
+  const lunchAt = (now: number) => tcAt(now, T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS);
+
+  it('rings when lunch is over, with Lunch In Now, and replaces that banner with each repeat, which has no button', () => {
+    const lunchInNow = vi.fn();
+    const day = { ...NO_DAY, lunchInNow };
+    const { rerender } = renderAlarms({ tc: lunchAt(T0), day });
     expect(tags()).toEqual(['alarm:lunchEnd']);
     expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(
-      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: undefined }),
+      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: { label: 'Lunch In Now', run: lunchInNow } }),
     );
     const later = T0 + 15 * MINUTE_MS;
-    rerender({ date: TODAY, tc: lunchAt(later), now: later, day: NO_DAY, settings });
+    rerender({ date: TODAY, tc: lunchAt(later), now: later, day, settings });
     expect(tags()).toEqual(['alarm:lunchEnd', 'alarm:lunchEnd']);
     expect(vi.mocked(alert).mock.calls[1]![0]).toEqual(
-      expect.objectContaining({ title: 'Lunch Ended 15 min Ago', tone: 'warn', chime: settings.sounds.overdue }),
+      expect.objectContaining({ title: 'Lunch Ended 15 min Ago', tone: 'warn', chime: settings.sounds.overdue, action: undefined }),
     );
+  });
+
+  it('leaves Lunch In Now off a warning, which only a hand-made PUT gives it', () => {
+    const leads = makeSettings({ alarms: { ...settings.alarms, lunchEnd: { ...settings.alarms.lunchEnd, leadMinutes: [5] } } });
+    const before = T0 - 5 * MINUTE_MS;
+    renderAlarms({ tc: lunchAt(before), now: before, settings: leads, day: { ...NO_DAY, lunchInNow: vi.fn() } });
+    expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(expect.objectContaining({ tag: 'alarm:lunchEnd', title: 'Lunch Ends in 5 min', action: undefined }));
   });
 });
 

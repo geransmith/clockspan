@@ -225,4 +225,42 @@ describe('useTodayAlarms', () => {
       expect(api.putPunches).not.toHaveBeenCalled();
     });
   });
+
+  describe('Lunch In Now', () => {
+    // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ended at T0.
+    const atLunch = (lunchIn: number | null = null) => makeDay(TODAY, { punches: punchesAt(T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS, lunchIn) });
+    const banner = () => alerted().find((a) => a.tag === 'alarm:lunchEnd');
+
+    it('fills Lunch in with the minute of the press, not the one the banner was raised at, and the banner goes', async () => {
+      vi.mocked(api.putPunches).mockImplementation(echoPunches);
+      render(makeSettings(), atLunch());
+      await judged();
+      const action = banner()!.action!;
+      expect(action.label).toBe('Lunch In Now');
+      // Pressed 7 min after the banner went up, short of the first repeat.
+      vi.setSystemTime(T0 + 7 * MINUTE_MS);
+      vi.mocked(dismissByTag).mockClear();
+      await act(async () => action.run());
+      expect(api.putPunches).toHaveBeenCalledExactlyOnceWith(TODAY, atLunch(T0 + 7 * MINUTE_MS).punches, atLunch().punches);
+      expect(vi.mocked(unlockAudio).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(api.putPunches).mock.invocationCallOrder[0]!);
+      await judged();
+      expect(dismissByTag).toHaveBeenCalledWith('alarm:lunchEnd');
+    });
+
+    it("takes the banner down and sends nothing when another device's Lunch in reached the page first", async () => {
+      render(makeSettings(), atLunch());
+      await judged();
+      const action = banner()!.action!;
+      vi.mocked(dismissByTag).mockClear();
+      setVisibility('hidden');
+      vi.setSystemTime(T0 + MINUTE_MS);
+      // Back a minute later: the phone punched Lunch in as lunch ended.
+      vi.mocked(api.getDay).mockResolvedValue(answered(atLunch(T0)));
+      setVisibility('visible');
+      await judged();
+      expect(dismissByTag).toHaveBeenCalledWith('alarm:lunchEnd');
+      await act(async () => action.run());
+      expect(api.putPunches).not.toHaveBeenCalled();
+    });
+  });
 });

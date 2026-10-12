@@ -20,6 +20,8 @@ export interface AlarmDayState extends TargetDay {
   missedClockIn: number | null;
   /** The "Not Clocked In" banner's Clock In. */
   clockInAt: (at: number) => void;
+  /** The "Lunch Is Over" banner's Lunch In Now, which fills an empty Lunch in with the minute of the press. */
+  lunchInNow: () => void;
 }
 
 // Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps
@@ -33,7 +35,7 @@ const CLOCK_IN_KEY = 'clockIn:missing';
  * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
-  const { overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt } = day;
+  const { overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow } = day;
   const fired = useRef<{ date: string; set: Set<string> } | null>(null);
   const lastTargets = useRef<Record<string, { at: number; armed: boolean }>>({});
 
@@ -110,7 +112,10 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
           ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
           : e.id === 'retro'
             ? { label: ALARM_ACTIONS.openRetro, run: openRetro }
-            : undefined;
+            : // Reached only: a tap on a warning would record a short lunch, and on a repeat a late time.
+              e.id === 'lunchEnd' && e.kind === 'due'
+              ? { label: ALARM_ACTIONS.lunchInNow, run: lunchInNow }
+              : undefined;
       alert({
         kicker,
         title,
@@ -124,5 +129,5 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
         notifications: settings.notifications,
       });
     }
-  }, [dateKey, tc, settings, now, overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt]);
+  }, [dateKey, tc, settings, now, overtimeApproved, retroDone, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow]);
 }

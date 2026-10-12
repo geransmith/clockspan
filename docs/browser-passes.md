@@ -41,8 +41,9 @@ what `npm run seed` writes.
   banner shows at once, the clock-out banner with its "Overtime Approved" button. Lunch length 0
   keeps the lunch end alarm off; for it, run
   `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchMinutes":2,"alarms":{"lunchEnd":{"overdueEveryMinutes":1}}}'`
-  and press Now on Lunch out: "Lunch Is Over" shows at +2 min, a repeat replaces it at +3, and Now
-  on Lunch in takes it down. After a reload, clear Lunch out (×) and press its Now again at a new
+  and press Now on Lunch out: "Lunch Is Over" shows at +2 min with a "Lunch In Now" button, which
+  fills Lunch in and takes the banner down; a repeat replaces it at +3, with no button, and Now on
+  Lunch in takes it down. After a reload, clear Lunch out (×) and press its Now again at a new
   minute to see it again. When done, `npm run seed -- --fresh` or
   `curl -X DELETE localhost:3000/api/settings` puts the default settings back.
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
