@@ -5,7 +5,7 @@ import { missedClockIn } from '../lib/alarms';
 import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { daySettings, dayTimeclock, overtimeOn } from '../lib/timeclock';
-import { useAlarms } from './useAlarms';
+import { useAlarms, type AlarmDayState } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
 import { useSettings } from './useSettings';
 import { useSettled } from './useSettled';
@@ -29,9 +29,19 @@ const HOLD_MS = 5 * MINUTE_MS;
  * timer's alerts: judged against the defaults, a longer work day would ring the clock-out alarm
  * on load, with the default sound. Today's failed first load (no punches, so no alarm can ring)
  * is a banner while the page doesn't show today (`todayShown`); the sheet on today and the board
- * show it in place with Try Again.
+ * show it in place with Try Again. The break alarm reads the running session from today's copy, not
+ * `useTimer().running`: the alarms wait for today's come-back read, which brings the breaks and
+ * sessions with the punches, but not for the timer's own sync, so a timer started on another device
+ * would ring the alarm here a moment before that sync landed. A session started before midnight is
+ * on yesterday's sheet and doesn't count.
  */
-export function useTodayAlarms(today: string, now: number, openRetro: () => void, todayShown: boolean): { setEditingPunches: (editing: boolean) => void } {
+export function useTodayAlarms(
+  today: string,
+  now: number,
+  openRetro: () => void,
+  todayShown: boolean,
+  timer: Pick<AlarmDayState, 'startBreak' | 'timerStarting'>,
+): { setEditingPunches: (editing: boolean) => void } {
   const { settings, loaded } = useSettings();
   const { day, failed, store } = useDay(today);
   const refreshing = useRefreshDay(today);
@@ -46,6 +56,9 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
   useAlarms(today, tc, daySettings(settings, { workMinutes }), now, {
     overtimeApproved: overtimeOn(settings, Boolean(day?.overtimeApproved)),
     retroDone: Boolean(day?.retroAt),
+    breaks: day?.breaks ?? [],
+    timerRunning: Boolean(day?.sessions.some((s) => s.status === 'running')),
+    ...timer,
     approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
     openRetro,
     missedClockIn: day ? missedClockIn(day, settings) : null,

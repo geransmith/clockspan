@@ -90,6 +90,8 @@ export const TEST_SETTINGS: Settings = {
     clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },
+    // Off, unlike the default: it would ring in every test clocked in 90 min. A test of it turns it on.
+    noBreak: { enabled: false, leadMinutes: [], onDue: true, overdueEveryMinutes: 60 },
   },
   layout: CARD_IDS.map((id) => ({ id, visible: true, side: TEST_SIDES[id] })),
   retention: { enabled: false, days: 365 },

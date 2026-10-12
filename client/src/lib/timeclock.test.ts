@@ -297,6 +297,28 @@ describe('times typed ahead of now', () => {
   });
 });
 
+describe('workingSince', () => {
+  const since = (times: (number | null)[], now: number) => computeTimeclock(punches(times), settings, now).workingSince;
+
+  it('is the Clock in while working', () => {
+    expect(since([T0, null, null, null], T0 + 2 * HOUR_MS)).toBe(T0);
+  });
+
+  it('is null at lunch, on an extra Out and once done', () => {
+    expect(since([T0, T0 + 4 * HOUR_MS, null, null], T0 + 4 * HOUR_MS + 10 * MINUTE_MS)).toBeNull();
+    expect(since([T0, null, null, T0 + 2 * HOUR_MS, null, null], T0 + 2 * HOUR_MS + 10 * MINUTE_MS)).toBeNull();
+    expect(since([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, T0 + 8.5 * HOUR_MS], T0 + 9 * HOUR_MS)).toBeNull();
+  });
+
+  it('is the In that ended a lunch or an extra Out, once the clock reaches it', () => {
+    const lunch = [T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null];
+    // Lunch in typed ahead at Lunch out.
+    expect(since(lunch, T0 + 4 * HOUR_MS + 10 * MINUTE_MS)).toBeNull();
+    expect(since(lunch, T0 + 5 * HOUR_MS)).toBe(T0 + 4.5 * HOUR_MS);
+    expect(since([T0, null, null, T0 + 2 * HOUR_MS, T0 + 2.25 * HOUR_MS, null], T0 + 3 * HOUR_MS)).toBe(T0 + 2.25 * HOUR_MS);
+  });
+});
+
 describe('the end of lunch', () => {
   const lunch = punches([T0, T0 + 4 * HOUR_MS, null, null]);
   const ends = (p: Punch[], now: number, s: TimeclockSettings = settings) => computeTimeclock(p, s, now).lunchEndsAt;

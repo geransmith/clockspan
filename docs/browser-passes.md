@@ -44,7 +44,10 @@ what `npm run seed` writes.
   and press Now on Lunch out: "Lunch Is Over" shows at +2 min, a repeat replaces it at +3, and Now
   on Lunch in takes it down. After a reload, clear Lunch out (×) and press its Now again at a new
   minute to see it again. When done, `npm run seed -- --fresh` or
-  `curl -X DELETE localhost:3000/api/settings` puts the default settings back.
+  `curl -X DELETE localhost:3000/api/settings` puts the default settings back. For the break
+  alarm, after `npm run seed` (no `--running`) and with `window.confirm = () => true` set in the
+  page, delete today's two breaks in the Day Log: its banner shows within a second (after a reload,
+  run `localStorage.removeItem('focus:alarms')` first to see it again).
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
 - **The update banner**: in the page, wrap `window.fetch` so each answer that has a
   `Clockspan-Version` header names another version (a new `Response` over the same body, with
