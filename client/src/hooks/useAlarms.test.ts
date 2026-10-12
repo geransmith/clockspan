@@ -214,21 +214,17 @@ describe('missed clock-in', () => {
     expect(tags()).toEqual(['clock-in']);
   });
 
-  it('waits for a tab that is shown, and records nothing while hidden', () => {
+  it('waits for a tab that is shown, records nothing while hidden, and still comes down there', () => {
     setVisibility('hidden');
     const { rerender } = renderAlarms(props());
-    rerender(props({ now: T0 + 1000 }));
     expect(alert).not.toHaveBeenCalled();
     expect(localStorage.getItem('focus:alarms')).toBeNull();
 
     setVisibility('visible');
-    rerender(props({ now: T0 + 2000 }));
+    rerender(props({ now: T0 + 1000 }));
     expect(tags()).toEqual(['clock-in']);
     expect(localStorage.getItem('focus:alarms')).toBe(`${TODAY} clockIn:missing`);
-  });
 
-  it('takes the banner down in a hidden tab once nothing is left to offer', () => {
-    const { rerender } = renderAlarms(props());
     setVisibility('hidden');
     vi.mocked(dismissByTag).mockClear();
     rerender(props({ day: missed({ missedClockIn: null }) }));

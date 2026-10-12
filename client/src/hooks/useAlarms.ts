@@ -57,10 +57,10 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     for (const k of readDaySet(USER_KEYS.alarms, dateKey)) fired.current.set.add(k);
     if (tc.clockIn == null) {
       clearBanners();
-      // Up once a day, in a tab that is shown, and down with nothing left to offer, a Clock in
-      // (below) or a new day. A later change to the first start neither raises it again nor moves
-      // the minute its button writes. A hidden tab neither raises nor records it: with no chime, a
-      // banner there is a banner missed, and the clock ticks again when a tab is shown.
+      // Up once a day, and down with nothing left to offer, a Clock in (below) or a new day. A later
+      // change to the first start neither raises it again nor moves the minute its button writes.
+      // Only a shown tab raises and records it: with no chime, a banner in a hidden tab is a
+      // banner missed.
       if (missedClockIn == null) dismissByTag(CLOCK_IN_TAG);
       else if (document.visibilityState === 'visible' && !fired.current.set.has(CLOCK_IN_KEY)) {
         fired.current.set.add(CLOCK_IN_KEY);
