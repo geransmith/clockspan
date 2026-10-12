@@ -537,6 +537,7 @@ describe('dayTimeclock', () => {
     const r = dayTimeclock({ date: today, punches: punches([T0 + 24 * HOUR_MS, null, null]), workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(2 * 3600);
+    expect(r.unclosed).toBe(false);
   });
 
   it('runs a stored day on its own work-day length', () => {
@@ -546,11 +547,20 @@ describe('dayTimeclock', () => {
     expect(dayTimeclock({ date: today, punches: p, workMinutes: 240 }, settings, today, nowToday).clockOutAt).toBe(T0 + 28 * HOUR_MS);
   });
 
-  it('stops a past day with an unclosed clock-in at the end of that day', () => {
+  it('stops a past day left clocked in at the end of that day, and marks it unclosed', () => {
     expect(clampToDay(yesterday, today, nowToday)).toBe(new Date(2026, 8, 17, 0, 0).getTime() - 1);
     const r = dayTimeclock({ date: yesterday, punches: punches([T0, null, null]), workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('working');
     expect(r.workedSeconds).toBe(16 * 3600 - 1);
+    expect(r.unclosed).toBe(true);
+  });
+
+  it('leaves a past day with punches out of order and no Clock out to the punch-order check', () => {
+    // Lunch in typed before Lunch out.
+    const p = punches([T0, T0 + 4 * HOUR_MS, T0 + 3 * HOUR_MS, null]);
+    const r = dayTimeclock({ date: yesterday, punches: p, workMinutes: null }, settings, today, nowToday);
+    expect(r.outOfOrder).not.toBeNull();
+    expect(r.unclosed).toBe(false);
   });
 
   it('marks a past day done once it is off the clock, target or not', () => {
@@ -559,6 +569,7 @@ describe('dayTimeclock', () => {
     const r = dayTimeclock({ date: yesterday, punches: p, workMinutes: null }, settings, today, nowToday);
     expect(r.state).toBe('done');
     expect(r.clockOutAt).toBe(T0 + 4 * HOUR_MS);
+    expect(r.unclosed).toBe(false);
     expect(computeTimeclock(p, settings, T0 + 16 * HOUR_MS).state).toBe('at-lunch');
   });
 });

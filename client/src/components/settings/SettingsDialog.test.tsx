@@ -209,6 +209,22 @@ describe('SettingsDialog', () => {
     expect(document.activeElement).toBe(toggle('Browser notifications'));
   });
 
+  it("says why notifications can't reach this browser, and offers Allow only while the browser has no answer", async () => {
+    const shown = async (permission: ReturnType<typeof notificationPermission>) => {
+      vi.mocked(notificationPermission).mockReturnValue(permission);
+      // The row reads the permission as it mounts, and the dialog opens on Alarms, the tab used last.
+      cleanup();
+      await renderDialog();
+      return { hint: hint('Browser notifications'), allow: screen.queryByRole('button', { name: 'Allow', hidden: true }) !== null };
+    };
+    await renderDialog();
+    await openTab('Alarms');
+    expect(screen.getByText('Every alarm also shows an in-app banner. Alarms ring while Clockspan is open in a tab or the installed app.')).toBeTruthy();
+    expect(await shown('insecure')).toEqual({ hint: 'Needs HTTPS. Over plain http, alarms are a sound and a banner.', allow: false });
+    expect(await shown('unsupported')).toEqual({ hint: 'On iPhone, notifications work only from Clockspan added to the Home Screen.', allow: false });
+    expect(await shown('default')).toEqual({ hint: 'Not allowed in this browser yet. Until then, alarms are a sound and a banner.', allow: true });
+  });
+
   it('drops the overtime clause from the retrospective hint when Overtime is off', async () => {
     await renderDialog();
     await openTab('Alarms');

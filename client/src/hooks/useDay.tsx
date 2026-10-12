@@ -85,6 +85,12 @@ interface DayStore {
    */
   setPunches: (date: string, punches: Punch[]) => Promise<boolean>;
   /**
+   * A held day's punches changed by `fn`, for a writer off the Timeclock card (a banner's button):
+   * `fn` gets the rows the store shows now (`current()`) and returns the list to save, or null for
+   * nothing to save. Saved as `setPunches` saves; resolves false when nothing was sent.
+   */
+  editPunches: (date: string, fn: (rows: Punch[]) => Punch[] | null) => Promise<boolean>;
+  /**
    * A day's priorities, built on `base` (the list the caller read). The server lays the changes
    * made since `base` onto what it holds, so a row or a tick another device saved meanwhile
    * stays, and until it answers the day shows the same merge (`mergePriorities`). A row naming a
@@ -346,8 +352,8 @@ export function DayProvider({ children }: { children: ReactNode }) {
   // The newest list goes with the base of the oldest list not sent yet, so it carries every
   // change made since. That needs every list that takes a waiting one's place to be built on
   // `current()`, the copy that shows the one it replaces: the Priorities card flushes its draft
-  // on blur, before any other control on the sheet acts, and `setPunches` and `editPriorities`
-  // (which `addPriority` goes through) build on `current()`.
+  // on blur, before any other control on the sheet acts, and `setPunches`, `editPunches` and
+  // `editPriorities` (which `addPriority` goes through) build on `current()`.
   const sendLatest = useCallback(
     <F extends ListField>(
       field: F,
@@ -440,6 +446,15 @@ export function DayProvider({ children }: { children: ReactNode }) {
       );
     },
     [sendLatest, shownCopy],
+  );
+
+  const editPunches = useCallback(
+    (date: string, fn: (rows: Punch[]) => Punch[] | null) => {
+      const rows = shownCopy(date)?.punches;
+      const next = rows ? fn(rows) : null;
+      return next ? setPunches(date, next) : Promise.resolve(false);
+    },
+    [shownCopy, setPunches],
   );
 
   // Every priorities save, the board's and the timer's included, shown as the server will merge
@@ -691,6 +706,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       pruneBefore,
       taskChanged,
       setPunches,
+      editPunches,
       setPriorities,
       editPriorities,
       addPriority,
@@ -712,6 +728,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       pruneBefore,
       taskChanged,
       setPunches,
+      editPunches,
       setPriorities,
       editPriorities,
       addPriority,
