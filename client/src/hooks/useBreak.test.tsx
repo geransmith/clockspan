@@ -112,6 +112,18 @@ it("starts a break on today's sheet, counts it down and announces its end once, 
   expect(alert).toHaveBeenCalledTimes(1);
 });
 
+it("reads a break's full length at the start when the server's clock is a moment ahead, and then counts down", async () => {
+  const startedAt = T0 + 400;
+  vi.mocked(api.startBreak).mockResolvedValue(answered({ break: makeBreak({ id: 5, startedAt, endedAt: startedAt + 5 * MINUTE_MS }) }));
+  const { result } = render();
+  await settle();
+  act(() => void result.current.start(5));
+  await settle();
+  expect(result.current.remainingSeconds).toBe(300);
+  await settle(2000);
+  expect(result.current.remainingSeconds).toBe(299);
+});
+
 it('starts one break for a second tap while the first is out', async () => {
   const { result } = render();
   await settle();

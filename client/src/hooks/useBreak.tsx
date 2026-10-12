@@ -163,7 +163,8 @@ export function BreakProvider({ children }: { children: ReactNode }) {
   }, [last, loaded, refreshing, working, now, settings.sound, settings.sounds.breakDone, settings.notifications]);
 
   const endsAt = current?.endedAt ?? null;
-  const remainingSeconds = endsAt == null ? 0 : Math.ceil((endsAt - now) / 1000);
+  // Capped at the break's length: its end is on the server's clock, which can be a moment ahead of the page's.
+  const remainingSeconds = current ? Math.min(current.plannedSeconds, Math.ceil((current.endedAt - now) / 1000)) : 0;
   const value = useMemo(() => ({ endsAt, remainingSeconds, next, start, end }), [endsAt, remainingSeconds, next, start, end]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
