@@ -312,6 +312,10 @@ export const BANNERS_MORE = (n: number) => counted(n, 'more alert');
 export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =>
   `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;
 
+/** Today's Timeclock card while the lunch deadline falls in a meeting (`lunchClash`). */
+export const LUNCH_CLASH_NOTE = (deadline: string, title: string, from: string, to: string, by: string) =>
+  `Lunch by ${deadline} falls during ${title || 'a meeting'} (${from}–${to}). Take lunch by ${by} to be back for it.`;
+
 /** A meeting's end typed at or before its start, under its row on the Meetings card. */
 export const MEETING_ENDS_FIRST = 'The end is before the start.';
 

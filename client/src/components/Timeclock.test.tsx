@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
 import { offerNotifications, playSound, unlockAudio } from '../lib/alerts';
+import { LUNCH_CLASH_NOTE } from '../lib/copy';
 import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
+import type { LunchClash } from '../lib/meetings';
 import type { WeekHours } from '../lib/week';
 import { deferredAnswer, makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
@@ -22,7 +24,7 @@ function Card(props: Omit<ComponentProps<typeof Timeclock>, 'typing' | 'onTyping
   return <Timeclock {...props} typing={typing} onTyping={setTyping} />;
 }
 
-async function renderCard(date = TODAY, punches: Punch[] = punchesAt(), week: WeekHours | null = null) {
+async function renderCard(date = TODAY, punches: Punch[] = punchesAt(), week: WeekHours | null = null, lunchClash: LunchClash | null = null) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
   const card = (p: Punch[], now = T0) => (
@@ -36,6 +38,7 @@ async function renderCard(date = TODAY, punches: Punch[] = punchesAt(), week: We
         overtimeApproved={false}
         workMinutes={null}
         week={week}
+        lunchClash={lunchClash}
         focus={{ seconds: 0, count: 0 }}
         onChange={onChange}
         onOvertimeChange={vi.fn()}
@@ -66,6 +69,16 @@ beforeEach(() => {
 });
 
 describe('Timeclock', () => {
+  it('says when to take lunch to be back for a meeting that covers its deadline', async () => {
+    // Clocked in at 8:00, so lunch is due by 1:00 PM.
+    const clash = { meeting: { title: 'Customer call', startsAt: T0 + 210 * MINUTE_MS, endsAt: T0 + 270 * MINUTE_MS }, by: T0 + 180 * MINUTE_MS };
+    await renderCard(TODAY, punchesAt(T0 - HOUR_MS), null, clash);
+    expect(screen.getByText(LUNCH_CLASH_NOTE('1:00 PM', 'Customer call', '12:30 PM', '1:30 PM', '12:00 PM'))).toBeTruthy();
+    expect(LUNCH_CLASH_NOTE('1:00 PM', '', '12:30 PM', '1:30 PM', '12:00 PM')).toBe(
+      'Lunch by 1:00 PM falls during a meeting (12:30 PM–1:30 PM). Take lunch by 12:00 PM to be back for it.',
+    );
+  });
+
   it("holds today's alarms while a time field has focus, and not for the buttons beside it", async () => {
     const { onEditingChange } = await renderCard();
     focus(nowButton());

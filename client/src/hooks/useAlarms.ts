@@ -61,6 +61,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     snoozedUntil,
     snooze,
     inMeeting,
+    lunchClash,
   } = day;
   // Read at the press, not when the banner went up.
   const starting = useLatest(timerStarting);
@@ -116,7 +117,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     }
     dismissByTag(CLOCK_IN_TAG);
 
-    const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone, breaks, timerRunning }, now);
+    const targets = alarmTargets(tc, settings, { overtimeApproved, retroDone, breaks, timerRunning, lunchClash }, now);
 
     // A banner about a target that just disarmed (lunch taken) or moved (clock-out
     // pushed later) is stale; clear it before evaluating the new state.
@@ -129,7 +130,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       lastTargets.current[t.id] = { at: t.at, armed: t.armed };
     }
 
-    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
+    const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut, lunchClash };
     const { fire, crossed, snoozed } = dueEvents(targets, settings.alarms, fired.current.set, now, snoozedUntil, inMeeting);
     // Raised from the day, never the press, so every device and tab shows it, a reload included.
     for (const t of snoozed) {
@@ -209,5 +210,6 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     snoozedUntil,
     snooze,
     inMeeting,
+    lunchClash,
   ]);
 }

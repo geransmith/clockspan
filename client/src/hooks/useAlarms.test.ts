@@ -35,6 +35,7 @@ const NO_DAY: AlarmDayState = {
   snoozedUntil: {},
   snooze: vi.fn(),
   inMeeting: false,
+  lunchClash: null,
 };
 const SNOOZE = { label: 'Snooze 15 min', run: expect.any(Function) as () => void };
 

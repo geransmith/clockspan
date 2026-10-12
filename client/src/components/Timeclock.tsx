@@ -4,7 +4,8 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { offerNotifications, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { DAY_COMPLETE, NO_CLOCK_OUT, SECOND_MEAL_NOTE } from '../lib/copy';
+import { DAY_COMPLETE, LUNCH_CLASH_NOTE, NO_CLOCK_OUT, SECOND_MEAL_NOTE } from '../lib/copy';
+import type { LunchClash } from '../lib/meetings';
 import { focusNeighbour } from '../lib/focus';
 import { floorToMinute, formatDuration, formatWeekday } from '../lib/format';
 import { focusTile, timeclockTiles } from '../lib/tiles';
@@ -59,6 +60,8 @@ interface Props {
   typing: PairTyping | null;
   /** Kept stable (a state setter): the card lets the pair go as it unmounts. */
   onTyping: (typing: PairTyping | null) => void;
+  /** Today's lunch deadline falls in a meeting while lunch is still to come: the note says when to take it. */
+  lunchClash: LunchClash | null;
 }
 
 export function Timeclock({
@@ -78,6 +81,7 @@ export function Timeclock({
   orderNotice,
   typing,
   onTyping,
+  lunchClash,
 }: Props) {
   const { settings, loaded } = useSettings();
   // The day's target and the settings its timeclock ran on (`daySettings`).
@@ -278,6 +282,18 @@ export function Timeclock({
       {secondMeal != null && (
         <p className={`timeclock-note${tc.secondMealStatus === 'overdue' ? ' timeclock-note--danger' : ''}`}>
           {SECOND_MEAL_NOTE(tc.secondMealStatus === 'overdue', formatTime(secondMeal), formatDuration(settings.secondMealAfterMinutes * 60))}
+        </p>
+      )}
+
+      {lunchClash && (
+        <p className="timeclock-note">
+          {LUNCH_CLASH_NOTE(
+            formatTime(tc.lunchBy!),
+            lunchClash.meeting.title,
+            formatTime(lunchClash.meeting.startsAt),
+            formatTime(lunchClash.meeting.endsAt),
+            formatTime(lunchClash.by),
+          )}
         </p>
       )}
 

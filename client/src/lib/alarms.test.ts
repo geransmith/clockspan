@@ -101,6 +101,17 @@ describe('dueEvents', () => {
     ]);
   });
 
+  it("adds a target's extra warning before the usual ones, once, keyed by its minutes before", () => {
+    const withExtra = { ...target(T), extraLead: T - 60 * MINUTE_MS };
+    const r = dueEvents([withExtra], alarms(), new Set(), T - 59 * MINUTE_MS);
+    expect(r.fire.map((e) => [e.kind, e.minutes, e.at])).toEqual([['lead', 60, T - 60 * MINUTE_MS]]);
+    // One a usual lead already holds, or one at or after the deadline, adds nothing.
+    expect(dueEvents([{ ...target(T), extraLead: T - 15 * MINUTE_MS }], alarms(), new Set(), T - 15 * MINUTE_MS).crossed).toEqual([
+      eventKey('clockOut', 'lead', 15, T),
+    ]);
+    expect(dueEvents([{ ...target(T), extraLead: T }], alarms(), new Set(), T - 20 * MINUTE_MS).fire).toEqual([]);
+  });
+
   describe('in a meeting', () => {
     const leads = (id: AlarmId = 'clockOut') => [15, 5, 1].map((m) => eventKey(id, 'lead', m, T));
     const meeting = (targets: AlarmTarget[], fired: Set<string>, now: number) => dueEvents(targets, alarms(), fired, now, {}, true);
@@ -249,9 +260,15 @@ describe('alarmTargets', () => {
   // 8:00 clock-in, an 8 h day, lunch by 1 PM, a second meal after 10 h, every card shown.
   const s = TEST_SETTINGS;
   const IN = new Date(2026, 8, 16, 8, 0).getTime();
-  const day = { overtimeApproved: false, retroDone: false, breaks: [], timerRunning: false };
+  const day: TargetDay = { overtimeApproved: false, retroDone: false, breaks: [], timerRunning: false, lunchClash: null };
   const tc = (now: number, ...at: (number | null)[]) => computeTimeclock(punchesAt(...at), s, now);
   const armed = (targets: AlarmTarget[]) => Object.fromEntries(targets.map((t) => [t.id, t.armed]));
+
+  it("gives lunch the clash's warning when a meeting covers its deadline", () => {
+    const clash = { meeting: { title: '', startsAt: IN + 4 * HOUR_MS, endsAt: IN + 6 * HOUR_MS }, by: IN + 3.5 * HOUR_MS };
+    const lunch = alarmTargets(tc(IN + HOUR_MS, IN), s, { ...day, lunchClash: clash }, IN + HOUR_MS)[0]!;
+    expect([lunch.id, lunch.extraLead]).toEqual(['lunchBy', IN + 3.5 * HOUR_MS]);
+  });
 
   it('has nothing armed before clock-in', () => {
     const targets = alarmTargets(tc(IN), s, day, IN);
@@ -605,6 +622,7 @@ describe('describeEvent', () => {
     secondMealAfterMinutes: 600,
     now: T - 30 * MINUTE_MS,
     typedClockOut: null,
+    lunchClash: null,
   };
   const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(id, kind, minutes, target),
@@ -661,6 +679,18 @@ describe('describeEvent', () => {
     expect(lead.tone).toBe('warn');
     expect(describeEvent(ev('retro', 'due', 0, T), ctx).tone).toBe('warn');
     expect(describeEvent(ev('retro', 'overdue', 10, T), ctx).title).toBe('Retrospective Is 10 min Overdue');
+  });
+
+  it("tells to take lunch now when a meeting covers the deadline, at the clash's own warning only", () => {
+    const clash = { meeting: { title: 'Customer call', startsAt: T - 30 * MINUTE_MS, endsAt: T + 30 * MINUTE_MS }, by: T - 60 * MINUTE_MS };
+    const warn = describeEvent(ev('lunchBy', 'lead', 60, T), { ...ctx, lunchClash: clash });
+    expect([warn.title, warn.tone]).toEqual(['Take Lunch Now', 'warn']);
+    expect(warn.body).toBe(
+      `Customer call runs ${formatTime(T - 30 * MINUTE_MS, true)}–${formatTime(T + 30 * MINUTE_MS, true)}, over your ${formatTime(T, true)} lunch deadline. Lunch out now to be back for it.`,
+    );
+    const untitled = describeEvent(ev('lunchBy', 'lead', 60, T), { ...ctx, lunchClash: { ...clash, meeting: { ...clash.meeting, title: '' } } });
+    expect(untitled.body).toMatch(/^A meeting runs /);
+    expect(describeEvent(ev('lunchBy', 'lead', 15, T), { ...ctx, lunchClash: clash }).title).toBe('Lunch in 15 min');
   });
 
   it('explains the lunch deadline window', () => {

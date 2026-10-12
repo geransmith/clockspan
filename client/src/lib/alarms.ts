@@ -1,6 +1,7 @@
 import type { AlarmId, AlarmSettings, Break, CardId, Day, Settings } from '../types';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { lastBreakEnd, runningBreak } from './breaks';
+import type { LunchClash } from './meetings';
 import { floorToMinute, formatMinutes, formatTime } from './format';
 import { secondMealApplies, type TimeclockResult, type TimeclockSettings } from './timeclock';
 
@@ -10,6 +11,8 @@ export interface AlarmTarget {
   at: number;
   /** False disables the target (e.g. lunch already taken, or clock-out still drifting). */
   armed: boolean;
+  /** One more warning, before the usual ones: lunch's when a meeting covers its deadline (`LunchClash.by`). */
+  extraLead?: number;
 }
 
 const cardShown = (layout: Settings['layout'], id: CardId) => layout.some((l) => l.id === id && l.visible);
@@ -29,6 +32,8 @@ export interface TargetDay {
   breaks: readonly Break[];
   /** A session runs on today's sheet, paused or due included. */
   timerRunning: boolean;
+  /** A meeting covers today's lunch deadline: lunch also warns when it must start to be back for it. */
+  lunchClash: LunchClash | null;
 }
 
 /**
@@ -62,6 +67,7 @@ export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & 
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
       armed: (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
+      extraLead: day.lunchClash?.by,
     },
     { id: 'lunchEnd', at: tc.lunchEndsAt ?? 0, armed: tc.lunchEndsAt != null },
     { id: 'clockOut', at: end, armed: endFixed && !day.overtimeApproved },
@@ -180,6 +186,9 @@ export function dueEvents(
       target: target.at,
     });
     const candidates = cfg.leadMinutes.map((lead) => event('lead', lead, target.at - lead * MINUTE_MS));
+    // Keyed by its whole minutes before, as a lead is; one the usual leads already hold isn't added twice.
+    const extra = target.extraLead != null ? Math.round((target.at - target.extraLead) / MINUTE_MS) : 0;
+    if (extra > 0 && !cfg.leadMinutes.includes(extra)) candidates.push(event('lead', extra, target.extraLead!));
     if (cfg.onDue) candidates.push(event('due', 0, target.at));
     if (cfg.overdueEveryMinutes > 0) {
       const every = cfg.overdueEveryMinutes * MINUTE_MS;
@@ -213,6 +222,8 @@ type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinute
   hour12: boolean;
   now: number;
   typedClockOut: number | null;
+  /** The meeting on at the lunch deadline, whose warning (`extraLead`) says so. */
+  lunchClash: LunchClash | null;
 };
 
 interface EventCopy {
@@ -283,6 +294,15 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
         tone: 'warn',
       };
     case 'lunchBy':
+      if (kind === 'lead' && ctx.lunchClash && e.at === ctx.lunchClash.by) {
+        const { title, startsAt, endsAt } = ctx.lunchClash.meeting;
+        return {
+          kicker,
+          title: 'Take Lunch Now',
+          body: `${title || 'A meeting'} runs ${formatTime(startsAt, ctx.hour12)}–${formatTime(endsAt, ctx.hour12)}, over your ${target} lunch deadline. Lunch out now to be back for it.`,
+          tone: 'warn',
+        };
+      }
       if (kind === 'lead') {
         return {
           kicker,

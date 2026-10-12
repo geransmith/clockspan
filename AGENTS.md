@@ -906,7 +906,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   (`MEETING_RINGS`: lunch, the end of lunch, clock-out and the second meal), crossing the warnings
   before it. Every other event, the break alarm and the retrospective included, stays uncrossed, so
   the latest one missed rings once the meeting ends. A banner already up stays, and a meeting never
-  counts as rest (`lastBreakEnd` reads breaks only).
+  counts as rest (`lastBreakEnd` reads breaks only). A meeting on at the lunch deadline
+  (`lunchClash`) gives lunch one more warning (`AlarmTarget.extraLead`) at the latest Lunch out that
+  is back before the meeting starts: "Take Lunch Now", naming the meeting and the deadline, which
+  itself doesn't move, so the due ring and the overdue minutes stay the legal ones. Today's
+  Timeclock card says the same while lunch is still to come (`LUNCH_CLASH_NOTE`).
 - **Today's alarms wait while a punch is being typed.** Today's punches are held while a punch time
   field on today's sheet has focus (`Timeclock`'s `onEditingChange`; Now, × and the pair buttons
   save at once and never hold), for at most five minutes after the last change or move to another

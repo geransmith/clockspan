@@ -42,7 +42,9 @@ what `npm run seed` writes.
   at 1280, wrapped at 375, never clipped). Snooze 15 min on lunch's due banner at +3, within its
   first minute, swaps it for a quiet info banner, with no chime, reading "Take lunch now. It rings
   again at …"; the second meal still rings at +6 and repeats. Snooze on clock-out at +10 turns it
-  quiet with its own line and time, and lunch's keeps its own. A reload during the snooze shows
+  quiet with its own line and time, and lunch's keeps its own. For a lunch clash, add a meeting on
+  the Meetings card from +2 to +5 with Lunch length 1: the Timeclock card's note names it and says
+  to take lunch by +1, and lunch's "Take Lunch Now" warning rings at +1 naming the meeting. A reload during the snooze shows
   both again, with no chime, and in a second window (as in Live updates) a Snooze in one turns the
   other's banner quiet within a second. Lunch rings once when its snooze ends ("Lunch Is 15 min
   Overdue"), then 5 min after that. Lunch length 0 keeps the lunch end alarm off; for it, run

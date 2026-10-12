@@ -5,7 +5,7 @@ import { missedClockIn, SNOOZE_MINUTES } from '../lib/alarms';
 import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { floorToMinute } from '../lib/format';
-import { dayMeetings, meetingAt } from '../lib/meetings';
+import { dayMeetings, lunchClash, meetingAt } from '../lib/meetings';
 import { daySettings, dayTimeclock, LUNCH_IN_POSITION, overtimeOn } from '../lib/timeclock';
 import { useAlarms, type AlarmDayState } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
@@ -55,6 +55,7 @@ export function useTodayAlarms(
   // Nothing is memoized: Shell renders every second and useAlarms' effect runs on each tick anyway.
   const workMinutes = day?.workMinutes ?? null;
   const tc = punches ? dayTimeclock({ date: today, punches, workMinutes }, settings, today, now) : null;
+  const meetings = day ? dayMeetings(today, day.meetings, settings.meetings) : [];
   // A banner's punch, only while its row is empty: one that reached this page before the press stands.
   const fill = (position: number, at: number) =>
     void store.editPunches(today, (rows) => (rows[position]?.at === null ? rows.map((p) => (p.position === position ? { ...p, at } : p)) : null));
@@ -66,7 +67,8 @@ export function useTodayAlarms(
     ...timer,
     approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
     snoozedUntil: day?.snoozedUntil ?? {},
-    inMeeting: day != null && meetingAt(dayMeetings(today, day.meetings, settings.meetings), now) != null,
+    inMeeting: meetingAt(meetings, now) != null,
+    lunchClash: tc ? lunchClash(tc.lunchBy, meetings, settings.lunchMinutes) : null,
     // The clock is read at the press, never inside the store's `apply`.
     snooze: (id) => void store.setSnoozedUntil(today, id, Date.now() + SNOOZE_MINUTES * MINUTE_MS),
     openRetro,
