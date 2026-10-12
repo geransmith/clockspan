@@ -272,8 +272,11 @@ describe('times typed ahead of now', () => {
   });
 
   it('is working with Lunch out and the Clock out both typed ahead', () => {
-    const r = computeTimeclock(punches([T0, T0 + 4 * HOUR_MS, null, T0 + 9 * HOUR_MS]), settings, T0 + HOUR_MS);
+    const p = punches([T0, T0 + 4 * HOUR_MS, null, T0 + 9 * HOUR_MS]);
+    const r = computeTimeclock(p, settings, T0 + HOUR_MS);
     expect([r.outOfOrder, r.state]).toEqual([null, 'working']);
+    // The lunch rows are never skipped, so Lunch in keeps its Now before lunch (owner's call).
+    expect(nextPunchPosition(p, true, T0 + HOUR_MS)).toBe(2);
   });
 
   it('reads past an Out waiting on an empty Lunch in, and names it once the clock reaches it', () => {

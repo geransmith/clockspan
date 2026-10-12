@@ -119,7 +119,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     .filter((p): p is Punch & { at: number } => p.at != null)
     .sort((a, b) => a.at - b.at || tieRank(a) - tieRank(b) || a.position - b.position);
   // Order is checked over every time typed, so a slip in one still ahead shows as it is typed,
-  // but for an Out planned after a lunch or break not ended yet (`orderSlip`).
+  // except an Out planned after a lunch or break not ended yet (`orderSlip`).
   const outOfOrder = orderSlip(typed, byPos, finalPos, upTo);
   const set = typed.filter((p) => p.at <= upTo);
 
@@ -226,11 +226,10 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
  * Null while the set punches, sorted by time, alternate in, out, in, out; else the punch out of
  * place and the one it should come after. Nothing comes before the Clock in, and an In comes after
  * its own Out. Past those, two outs follow each other: the In that should close the first is
- * empty or later than the second, or the first is a Clock out that came early. Two outs whose In
- * between is still empty wait while the second is ahead of `upTo`: someone at lunch or on a break
- * with an appointment or the Clock out typed for later hasn't slipped yet, and is told once the
- * clock reaches that Out with the In still empty. The walk reads such a pair as if the empty In
- * sat between the two.
+ * empty or later than the second, or the first is a Clock out that came early. Two outs where the
+ * first isn't the Clock out and its own In is still empty wait while the second is ahead of `upTo`:
+ * someone at lunch or on a break with an appointment or the Clock out typed for later hasn't
+ * slipped yet, and is told once the clock reaches that Out with the In still empty.
  */
 function orderSlip(typed: (Punch & { at: number })[], byPos: Map<number, number | null>, finalPos: number | null, upTo: number): TimeclockResult['outOfOrder'] {
   const i = typed.findIndex((p, k) => p.kind !== kindForPosition(k));
