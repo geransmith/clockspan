@@ -789,8 +789,8 @@ function Column({
         {add && (
           <button
             ref={headRef}
-            // Later's is pressed by the header's Add to Later. Not `shut`: that is the line's.
-            id={`${shut}-button`}
+            // Pressed by the header's Add to Later. Not `shut`'s id: that is the line's.
+            id={id === 'later' ? 'board-add-later-button' : undefined}
             className="btn btn-ghost board-add"
             title={`Add to ${COLUMN_NAMES[id]}`}
             aria-disabled={add.shut ? true : undefined}

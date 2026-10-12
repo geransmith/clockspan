@@ -93,7 +93,7 @@ function Shell() {
     flushSync(() => setLaterOpen(true));
     laterBox.current?.focus();
   };
-  const closeLater = useCallback(() => setLaterOpen(false), []);
+  const closeLater = () => setLaterOpen(false);
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {

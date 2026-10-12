@@ -1,13 +1,13 @@
 /**
- * The board's logic, with no React and no dnd-kit: which column each task and each of today's
- * rows shows in (`boardColumns`) and the day a task left open leaves Next (`leavesNext`), what a
- * move does and which store it writes (`planMove`), a write's failure as a banner or the caller's
- * own line (`saved`, which the sheet's note and the Later strip use too), where a drop lands and what a drag says (`dropTarget`, `withDrag`,
- * `moveAnnouncement`), the leftovers the left-open offer brings back (`offeredLeftovers`) and the
- * top of Next it offers after them (`topOfNext`), what New category makes of a name
- * (`categoryForName`, `nextColor`), and the board as a write shows it before the server answers
- * (`withItem`, `withItemPatch`, `withoutItem`, `withCategory`, `withCategoryPatch`,
- * `withoutCategory`).
+ * The board's logic, with no React and no dnd-kit: which column each task and each of today's rows
+ * shows in (`boardColumns`) and the day a task left open leaves Next (`leavesNext`), what a move
+ * does and which store it writes (`planMove`), a write's failure as a banner or the caller's own
+ * line (`saved`, which the sheet's note and the Later strip use too), where a drop lands and what a
+ * drag says (`dropTarget`, `withDrag`, `moveAnnouncement`), the leftovers the left-open offer
+ * brings back (`offeredLeftovers`) and the top of Next it offers after them (`topOfNext`), what New
+ * category makes of a name (`categoryForName`, `nextColor`), and the board as a write shows it
+ * before the server answers (`withItem`, `withItemPatch`, `withoutItem`, `withCategory`,
+ * `withCategoryPatch`, `withoutCategory`).
  *
  * Each task is stored once, and nothing about In Progress or Done is: a task on today's list
  * shows as its row there, and any other one-off task by its latest entry (`listDate`, `listDone`)

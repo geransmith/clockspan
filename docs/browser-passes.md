@@ -183,10 +183,10 @@ what `npm run seed` writes.
   earlier day's tick of a recurring priority that stopped repeating shows its note as text. A key
   typed into a note does nothing. Categories (with about 30 added by `curl` to
   `/api/board/categories` for a long list): a box's chip (a pick, New category, kept after a reload
-  and in the other boxes and in the Later strip), a card dialog's chip with its list opening over the sheet, unclipped,
-  scrolling inside with the box in view, its Escape closing only the list, the cards' dot and name
-  (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches wrapping at
-  375, Remove, the touch areas).
+  and in the other boxes and in the Later strip), a card dialog's chip with its list opening over
+  the sheet, unclipped, scrolling inside with the box in view, its Escape closing only the list, the
+  cards' dot and name (a long name at 1000), and Settings → Board (a rename, a name in use, the
+  swatches wrapping at 375, Remove, the touch areas).
   The empty lines, on an empty DB (stop the dev server, delete `data/focus.db*`, start it again; a
   seeded board never shows Later's line, since Repeats holds the two routines): Later reads
   "Nothing parked. N or + adds a card." at 1280 and 1000, and "Nothing parked. + adds a card." on
@@ -215,7 +215,8 @@ what `npm run seed` writes.
   open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
   the board at 1440, N and L open Later's box (with a box already open too), R does nothing, and a
   key pressed during a keyboard drag does nothing. Off the board, L opens the Later strip with the
-  focus in its box, and pressed again with the strip open only puts the focus back in it. With Settings → Sheet → Keyboard off no key acts.
+  focus in its box, and pressed again with the strip open only puts the focus back in it. With
+  Settings → Sheet → Keyboard off no key acts.
   The header buttons' titles name their keys (none with Keyboard off).
   The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
   button's key.

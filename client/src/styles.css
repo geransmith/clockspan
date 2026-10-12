@@ -1758,8 +1758,9 @@ button.log-label:hover {
 
 /* ---------- Later strip ---------- */
 /* A band like the running bar, under it or under the header. No display here, or `hidden` (on the
-   Board) stops hiding it. Its lines are always there (one is a live region), and an empty one has
-   no height, so only a line with words takes room under the box. */
+   Board) stops hiding it. The status line is always there (a live region) and the error line only
+   while it has words; an empty `p` has no height, so only a line with words takes room under the
+   box. */
 .later-strip {
   margin-bottom: 16px;
   background: var(--surface);
