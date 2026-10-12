@@ -89,6 +89,7 @@ client/                 Vite root → dist/client
   src/sounds/           bundled CC0 clips; the README.md there is the only record of their sources
   src/styles.css        design tokens and all component CSS
 scripts/                screenshots.mjs and icons.mjs (headless Chromium via browser.mjs), smoke-image.sh
+                        and smoke-local.sh, which runs it on both platforms (`npm run smoke`)
 docs/                   browser-passes.md; screenshots/, the PNGs the README and the Unraid template
                         embed, dark theme only (sheet-desktop.png is the template's alone)
 Dockerfile, docker/     the image; entrypoint.sh owns /data as PUID:PGID and drops root
@@ -118,6 +119,8 @@ npm run seed           # fill data/focus.db with sample days; see "Dev data is d
 npm run screenshots    # regenerate docs/screenshots/ (starts the dev server if needed; finds or
                        # fetches a Chromium into node_modules/.cache; CHROME_BIN to force one)
 npm run icons          # render the PNG icons from client/public/icons/icon.svg (same Chromium)
+npm run smoke          # build and boot the image for amd64 and arm64, as image-smoke does (needs
+                       # Docker; without it, says so and passes)
 npm run build          # dist/client + dist/server + dist/shared
 npm start              # node dist/server/index.js (PORT default 3000; Docker sets 8080)
 npm run reset-password -- <username>
@@ -1321,8 +1324,10 @@ tests that reach it, and an unreachable branch is deleted, never hidden behind `
 
 ## Gotchas
 
-- `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). There is no Docker on the
-  dev machine, so `image-smoke` (`scripts/smoke-image.sh`) on each PR is the image's first run.
+- `npm ci --ignore-scripts` is deliberate (the Dockerfile says why). Docker is recommended for
+  development, not required: with it, `npm run smoke` (in CONTRIBUTING.md's "Before opening"
+  list) builds and boots the image before every PR; without it the script passes with a note, and
+  `image-smoke` on the PR is the image's first run.
 - The preview harness exports `PORT=5173`, which is why `dev:server` pins `PORT=3000` and the
   `prod` config `PORT=8090`.
 - `client/public/sw.js` caches nothing, on purpose (its comments say why), and is registered only
