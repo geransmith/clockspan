@@ -9,7 +9,7 @@ import { SettingsProvider } from '../../hooks/useSettings';
 import { unlockAudio, warnQuietly, warnSaveFailed } from '../../lib/alerts';
 import { withItemPatch, withoutItem } from '../../lib/board';
 import { BOARD, CONFIRM, DONE_STAYS, LOAD_FAILED, PRIORITY_WARNINGS, WARNING_ACTIONS } from '../../lib/copy';
-import { dayName } from '../../lib/format';
+import { dayName, formatDateLong } from '../../lib/format';
 import {
   answered,
   completedSession,
@@ -90,6 +90,21 @@ describe('Board', () => {
     expect(screen.getByRole('button', { name: 'Earlier This Week · 2' }).getAttribute('aria-expanded')).toBe('true');
   });
 
+  // A touch screen hides the key too, by CSS (`.board-key`), which happy-dom doesn't load.
+  it('says what goes in an empty Later and Next, naming N only while the key is on', async () => {
+    onServer = makeBoard();
+    await renderBoard();
+    const later = within(column('Later')).getByText(/Nothing parked/);
+    expect(later.textContent).toBe('Nothing parked. N or + adds a card.');
+    expect(later.querySelector('.board-key')?.textContent).toBe('N or ');
+    expect(within(column('Next')).getByText('Tasks left open on earlier days wait here for two weeks.')).toBeTruthy();
+    cleanup();
+    await renderBoard(makeSettings({ shortcuts: false }));
+    const keyless = within(column('Later')).getByText(/Nothing parked/);
+    expect(keyless.textContent).toBe('Nothing parked. + adds a card.');
+    expect(keyless.querySelector('.board-key')).toBeNull();
+  });
+
   it("names the day on a routine's earlier ticks, which read alike, and counts the fold only beside today's done items", async () => {
     serveRange([makeDay(TUE, { priorities: [tuesdayRoutine()] }), makeDay(MON, { priorities: [tuesdayRoutine()] })]);
     await renderBoard();
@@ -127,6 +142,7 @@ describe('Board', () => {
     expect(within(column('Next')).getByText('Left open from yesterday')).toBeTruthy();
     expect(screen.queryByText('Too old')).toBeNull();
     openCard('Check the logs');
+    expect(within(dialog()).getByText(BOARD.leavesNext(formatDateLong(addDays(TUE, LOOKBACK_DAYS + 1))))).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Title' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Category for Check the logs: none' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();

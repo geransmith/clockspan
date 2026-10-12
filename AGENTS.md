@@ -992,8 +992,10 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   sound goes in `timer`, the one group the listener unlocks audio for; a test checks that no two
   share a key → `useShortcut(id, run)` in the component that renders its button, before any early
   return, with `run` null whenever the button wouldn't act, and the hook's answer on the button's
-  `aria-keyshortcuts` → a case in that component's test, with `ShortcutKeys` in its wrapper and
-  `pressKey` (`test/hooks.tsx`) → the key in the README's Keyboard paragraph (Features).
+  `aria-keyshortcuts` (on a header button, in its `title` too, "Board (B)", with an `aria-label`
+  that keeps its name where the title would otherwise give it one) → a case in that component's
+  test, with `ShortcutKeys` in its wrapper and `pressKey` (`test/hooks.tsx`) → the key in the
+  README's Keyboard paragraph (Features).
 - **A category colour** (the palette is eight on purpose, and colours repeat past that): add the
   id to `CATEGORY_COLORS` in `shared/api.ts` (the server's `isOneOf` check, `nextColor` and the
   swatches read it) → its `--cat-<id>` token in all three token blocks of `styles.css`, at 3:1 or

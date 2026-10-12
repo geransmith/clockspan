@@ -48,7 +48,7 @@ describe('copy builders', () => {
   });
 
   it('asks before × takes a task off a day, with the parts of the body that apply', () => {
-    expect(REMOVE_TASK.title('Email Bob')).toBe('Remove Email Bob');
+    expect(REMOVE_TASK.title('Email Bob')).toBe('Remove “Email Bob”?');
     expect(REMOVE_TASK.body(3, '1h 20m', false)).toBe(
       'It is on 3 other days, and 1h 20m is logged on it. Delete Everywhere takes it off every day. The time stays in the log, unplanned.',
     );
@@ -160,13 +160,14 @@ describe('copy builders', () => {
     );
   });
 
-  it('names the card and the day in the board refusals, and the cap in the full line', () => {
+  it('names the card and the day in the board refusals and dialog lines, and the cap in the full line', () => {
     expect(BOARD.full).toBe('Later and Next hold 300 cards at most.');
     expect(BOARD.recurringStays('Monitor the queue')).toBe('Monitor the queue repeats, so it stays under Repeats.');
     expect(BOARD.removed('Follow-ups')).toBe('Follow-ups stopped repeating.');
     expect(BOARD.doneOn('yesterday')).toBe("Done yesterday. Untick it on that day's sheet.");
     expect(BOARD.doneOn('Mon, Oct 5')).toBe("Done Mon, Oct 5. Untick it on that day's sheet.");
     expect(BOARD.doneAhead('tomorrow')).toBe("Ticked on the list for tomorrow. Untick it on that day's sheet once the day comes.");
+    expect(BOARD.leavesNext('Wed, Oct 14')).toBe('Leaves Next on Wed, Oct 14. Move it to Later to keep it.');
   });
 
   it('says a done item stays done and offers a new card in the lane it was moved to', () => {

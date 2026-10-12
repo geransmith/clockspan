@@ -5,6 +5,7 @@ import {
   dayName,
   formatCountdown,
   formatDateFull,
+  formatDateShort,
   formatDateSpan,
   formatDuration,
   formatDurationCeil,
@@ -51,6 +52,10 @@ describe('dates', () => {
     // Across New Year the locale adds the years.
     expect(formatDateSpan('2025-12-29', '2026-01-04')).toBe(span.formatRange(new Date(2025, 11, 29), new Date(2026, 0, 4)));
     expect(formatDateSpan('2025-12-29', '2026-01-04')).toMatch(/2026/);
+  });
+
+  it('writes a short date as month and day', () => {
+    expect(formatDateShort('2026-10-10')).toBe(new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(2026, 9, 10)));
   });
 
   it('takes an instant down to the start of its minute, never later', () => {

@@ -119,12 +119,12 @@ what `npm run seed` writes.
 - **The board**: after `npm run seed`, press Board. At 1440: the four columns; each +'s box (Later's
   card at the top, Next's at the end, In Progress's row on today's sheet and asking past three rows;
   Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a
-  left-open task's "Left open from …" in Next, Move to from each column (a done item's notice), a
-  park of a task typed seconds ago, a done-earlier task's dialog, this week's routine ticks in Done,
-  each with its day ("Done yesterday"), the fold's number gone while nothing is done today, and a
-  task ticked on a later day with today's, its dialog naming that day (in a second tab, DevTools →
-  Sensors → Location, Timezone ID Pacific/Kiritimati: Move to Done on a Next card, then reload the
-  first tab); with the earlier days' read failing (wrap `window.fetch` so `GET /api/days/range`
+  left-open task's "Left open from …" in Next, and its dialog names the day it leaves Next, Move to
+  from each column (a done item's notice), a park of a task typed seconds ago, a done-earlier
+  task's dialog, this week's routine ticks in Done, each with its day ("Done yesterday"), the
+  fold's number gone while nothing is done today, and a task ticked on a later day with today's,
+  its dialog naming that day (in a second tab, DevTools → Sensors → Location, Timezone ID
+  Pacific/Kiritimati: Move to Done on a Next card, then reload the first tab); with the earlier days' read failing (wrap `window.fetch` so `GET /api/days/range`
   rejects, then press Board), Done ends with "Could not load these days" and Try Again, and no
   banner. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
   Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays
@@ -169,6 +169,11 @@ what `npm run seed` writes.
   scrolling inside with the box in view, its Escape closing only the list, the cards' dot and name
   (a long name at 1000), and Settings → Board (a rename, a name in use, the swatches wrapping at
   375, Remove, the touch areas).
+  The empty lines, on an empty DB (stop the dev server, delete `data/focus.db*`, start it again; a
+  seeded board never shows Later's line, since Repeats holds the two routines): Later reads
+  "Nothing parked. N or + adds a card." at 1280 and 1000, and "Nothing parked. + adds a card." on
+  a touch screen (`pointer: coarse`, as at the 375 preset) and with Keyboard off; Next reads "Tasks
+  left open on earlier days wait here for two weeks."; each wraps cleanly in its column.
 - **Keyboard shortcuts**: after `npm run seed -- --running`, at 1280: ? opens
   the list with the focus on it, ? again does nothing and Escape gives the focus back; P pauses
   and resumes, + adds the step, and once the timer is a minute or more past its end (see "The
@@ -180,13 +185,15 @@ what `npm run seed` writes.
   open, does nothing, and Option+B, Cmd+H and Ctrl+F do only what the browser does. On
   the board at 1440, N opens Later's box (with a box already open too), R does nothing, and a key
   pressed during a keyboard drag does nothing. With Settings → Sheet → Keyboard off no key acts.
+  The header buttons' titles name their keys (none with Keyboard off).
   The list at 1000 and 375, light and dark; a screen reader reads its title and keys, and a
   button's key.
-- **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day,
-  **Open Day**, browser Back lands on that month with the day picked, and back through the
-  header, **Review This Week** lands on that week. Review → Month → ◀ → a row → Back lands on that
-  month's review. With the sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows
-  the grid to one sticker and a second tap clears it; with Show weekends off, five columns.
+- **The History calendar**: one month at the mobile preset: ◀ to a seeded month, tap a day (a
+  tap on a day scrolls its panel into view, and the focus stays on the day), **Open Day**, browser
+  Back lands on that month with the day picked, and back through the header, **Review This Week**
+  lands on that week. Review → Month → ◀ → a row → Back lands on that month's review. With the
+  sticker chart on (`PUT /api/settings {"stickers":true}`), a chip narrows the grid to one sticker
+  and a second tap clears it; with Show weekends off, five columns.
 - **Retention**: one look at Settings → Data (count line, toggle saves); drive the delete with
   curl (`POST /api/days/prune` with `{"before":"YYYY-MM-DD"}`) because of the confirm dialog.
 - **Auth**: no browser pass; the tests in `server/auth/` (`*.test.ts`) cover local and OIDC

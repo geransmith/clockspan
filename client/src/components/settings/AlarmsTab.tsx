@@ -93,7 +93,7 @@ function AlarmEditor({ title, hint, alarm, onChange }: { title: string; hint?: s
             >
               {REPEAT_CHOICES.map((m) => (
                 <option key={m} value={m}>
-                  {m === 0 ? 'Off' : `every ${m} min`}
+                  {m === 0 ? 'Off' : `Every ${m} min`}
                 </option>
               ))}
             </select>

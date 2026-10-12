@@ -297,10 +297,15 @@ button {
    tap on a phone, where :hover stays on the tapped button; it ties with .btn:hover and comes
    after it. */
 .btn-icon[aria-pressed='true'],
-.btn-icon[aria-pressed='true']:hover,
-.chip[aria-pressed='true'] {
+.btn-icon[aria-pressed='true']:hover {
   background: var(--accent-soft);
   border-color: transparent;
+  color: var(--accent-ink);
+}
+/* A pressed chip keeps an edge: beside chips with a border, one without read as off. */
+.chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
   color: var(--accent-ink);
 }
 .btn-lg {
@@ -3227,6 +3232,10 @@ kbd {
   .board-card-open {
     padding-block: 10px;
     margin-block: -10px;
+  }
+  /* Later's empty line names N beside +, and a touch screen has no key to press. */
+  .board-key {
+    display: none;
   }
 }
 /* From 640 px the chip is beside a priority's field, centred in the row's 44 px with 16 px to the

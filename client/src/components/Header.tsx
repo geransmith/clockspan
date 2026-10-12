@@ -40,11 +40,13 @@ export function Header({ view, onNavigate, onOpenSettings }: Props) {
     historyButton.current?.focus();
     toggleHistory();
   });
+  // A title names its key while it is bound: "Board (B)".
+  const titled = (name: string, key: string | undefined) => (key ? `${name} (${key})` : name);
 
   return (
     <header className="topbar">
       <div className={crowded ? 'topbar-row topbar-row--crowded' : 'topbar-row'}>
-        <button ref={brandButton} className="brand" onClick={toToday} title="Go to today" aria-keyshortcuts={sheetKey}>
+        <button ref={brandButton} className="brand" onClick={toToday} title={titled('Go to today', sheetKey)} aria-keyshortcuts={sheetKey}>
           <img src="/icons/icon.svg" alt="" width={28} height={28} />
           <span className="brand-name">Clockspan</span>
         </button>
@@ -55,13 +57,23 @@ export function Header({ view, onNavigate, onOpenSettings }: Props) {
             className="btn btn-icon"
             onClick={toggleBoard}
             aria-pressed={onBoard}
-            title="Board"
+            // Its words are hidden on a phone, where the title would name it, key and all.
+            aria-label="Board"
+            title={titled('Board', boardKey)}
             aria-keyshortcuts={boardKey}
           >
             <Columns />
             <span className="btn-text">Board</span>
           </button>
-          <button ref={historyButton} className="btn btn-icon" onClick={toggleHistory} aria-pressed={onHistory} title="History" aria-keyshortcuts={historyKey}>
+          <button
+            ref={historyButton}
+            className="btn btn-icon"
+            onClick={toggleHistory}
+            aria-pressed={onHistory}
+            aria-label="History"
+            title={titled('History', historyKey)}
+            aria-keyshortcuts={historyKey}
+          >
             <List />
             <span className="btn-text">History</span>
           </button>

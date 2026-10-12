@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { startOfMonth } from '../../../shared/dates.js';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
@@ -64,6 +65,14 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
   const summary = picked && daySummaryOf(picked);
   const stats = summary && { summary, tc: dayTimeclock(summary, settings, today, now) };
 
+  // On a phone the panel sits under the grid, out of sight. Scrolled once the new panel has
+  // rendered, so `nearest` measures it, and never as History opens or the month steps.
+  const detail = useRef<HTMLDivElement>(null);
+  const pick = (day: string) => {
+    flushSync(() => setSelected(day));
+    detail.current?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+  };
+
   const step = (from: string) => {
     setMonth(from);
     // The panel only ever shows a day of the month on screen.
@@ -107,7 +116,7 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                       full={settings.stickers && d.full}
                       shown={settings.stickers ? (only ? d.stickers.filter((id) => id === only) : d.stickers) : null}
                       trackHours={settings.trackHours}
-                      onSelect={setSelected}
+                      onSelect={pick}
                     />
                   ),
                 )}
@@ -126,9 +135,9 @@ export function Calendar({ today, now, date, onOpen, onReviewWeek }: Props) {
                 ))}
               </div>
             ))}
-          <div className="calendar-detail">
+          <div className="calendar-detail" ref={detail}>
             {selected == null ? (
-              <p className="muted small">Tap a day to see it.</p>
+              <p className="muted small">Pick a day to see it.</p>
             ) : (
               <DayDetail
                 date={selected}

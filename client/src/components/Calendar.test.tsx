@@ -5,7 +5,7 @@ import { MINUTE_MS } from '../../../shared/dates.js';
 import * as api from '../api';
 import { CHECK_PUNCHES, LOAD_FAILED } from '../lib/copy';
 import { formatMonth } from '../lib/format';
-import { answered, makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle } from '../test/hooks';
+import { answered, makeDay, makeSettings, punchesAt, serveRange, SettingsAndDays, settle, stubMatchMedia } from '../test/hooks';
 import { Calendar } from './Calendar';
 
 vi.mock('../api');
@@ -53,9 +53,43 @@ describe('Calendar', () => {
     await settle();
     expect(api.getRange).toHaveBeenLastCalledWith(FIRST, '2026-10-31');
     expect(screen.getByRole('group', { name: formatMonth(FIRST) })).toBeTruthy();
-    expect(screen.getByText('Tap a day to see it.')).toBeTruthy();
+    expect(screen.getByText('Pick a day to see it.')).toBeTruthy();
     // The reset goes once pressed: the focus moves to Previous month.
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Previous month' }));
+  });
+
+  // On a phone the panel is under the grid, out of sight.
+  it('scrolls the day panel into view on a pick, never as it opens or on a month step', async () => {
+    // What the panel shows as it is scrolled to: `nearest` measures the panel as it is then.
+    let shown: string | null = null;
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      shown = this.textContent;
+    });
+    serveRange([clockedIn]);
+    render(calendar(LAST, LAST_EVENING));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    await settle();
+    expect(scrolled).not.toHaveBeenCalled();
+    const day = document.querySelector<HTMLElement>(`[data-date="${LAST}"]`)!;
+    day.focus();
+    fireEvent.click(day);
+    expect(scrolled.mock.calls).toEqual([[{ block: 'nearest', behavior: 'smooth' }]]);
+    expect(scrolled.mock.contexts).toEqual([document.querySelector('.calendar-detail')]);
+    expect(shown).toContain('Worked');
+    expect(document.activeElement).toBe(day);
+  });
+
+  it('scrolls to the day panel at once with reduced motion', async () => {
+    stubMatchMedia(new Set(['(prefers-reduced-motion: reduce)']));
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    serveRange([clockedIn]);
+    render(calendar(LAST, LAST_EVENING));
+    await settle();
+    fireEvent.click(document.querySelector<HTMLElement>(`[data-date="${LAST}"]`)!);
+    expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: 'nearest', behavior: 'instant' });
   });
 
   it('shows a failed load with Try again, which loads the month and hands the focus to Previous month', async () => {
