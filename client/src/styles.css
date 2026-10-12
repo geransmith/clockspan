@@ -1188,7 +1188,7 @@ button {
 }
 .ot-row,
 .target-row {
-  margin-bottom: 12px;
+  margin-top: 12px;
   padding: 4px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
