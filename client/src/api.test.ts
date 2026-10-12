@@ -96,6 +96,13 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   ['putPriorities', () => api.putPriorities(TODAY, [REPORT], [FREE]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT], base: [FREE] }],
   ['putOvertime', () => api.putOvertime(TODAY, true), 'PUT', `/api/days/${TODAY}/overtime`, { approved: true }],
   ['putSnooze', () => api.putSnooze(TODAY, 'lunchBy', 5), 'PUT', `/api/days/${TODAY}/snooze`, { alarm: 'lunchBy', until: 5 }],
+  [
+    'putMeeting',
+    () => api.putMeeting(TODAY, 'abcdef12', { title: 'Standup', startsAt: 5, endsAt: 9 }),
+    'PUT',
+    `/api/days/${TODAY}/meetings`,
+    { uid: 'abcdef12', meeting: { title: 'Standup', startsAt: 5, endsAt: 9 } },
+  ],
   ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
   ['putOffer', () => api.putOffer(TODAY), 'PUT', `/api/days/${TODAY}/offer`, undefined],

@@ -14,6 +14,7 @@ export const LIMITS = {
   retroNote: 4000,
   categoryName: 40,
   itemNote: 1000,
+  meetingTitle: 200,
 } as const;
 
 /** A password's length: the server refuses one outside it, and the new-password inputs take `minLength` and `maxLength` from it. */
@@ -229,10 +230,22 @@ export interface Day {
   snoozedUntil: Record<string, number>;
   /** When the morning offer was first answered, from any device (null = not yet): a day stamped offers nothing. */
   offerAnsweredAt: number | null;
+  /** This day's meetings by uid, set one at a time; null takes a meeting off this day. */
+  meetings: Record<string, Meeting | null>;
   sessions: Session[];
   /** By start. */
   breaks: Break[];
 }
+
+/** A meeting on a day: time at work that is neither focus nor rest. `title` may be ''. */
+export interface Meeting {
+  title: string;
+  startsAt: number;
+  endsAt: number;
+}
+
+/** The meeting keys a day may hold, null ones included: a sanity cap for an internet-exposed install, not a product limit. */
+export const MEETINGS_PER_DAY = 50;
 
 /**
  * A break between focus sessions. `endedAt` is set to the planned end when it starts and moved
@@ -262,6 +275,7 @@ export function emptyDay(date: string): Day {
     workMinutes: null,
     snoozedUntil: {},
     offerAnsweredAt: null,
+    meetings: {},
     sessions: [],
     breaks: [],
   };
@@ -305,6 +319,9 @@ export type OvertimeResponse = Pick<Day, 'overtimeApproved'>;
 
 /** `PUT /days/:date/snooze`: every alarm's snooze on the day as stored. */
 export type SnoozeResponse = Pick<Day, 'snoozedUntil'>;
+
+/** `PUT /days/:date/meetings`: every meeting key on the day as stored. */
+export type MeetingsResponse = Pick<Day, 'meetings'>;
 
 /** `PUT /days/:date/retro`: the note and the first reviewed-at, as stored. */
 export type RetroResponse = Pick<Day, 'retroNote' | 'retroAt'>;

@@ -5,8 +5,8 @@ import { seedDatabase, type DayKind } from '../dev/seed.js';
 import { ensureDay } from './shared.js';
 import { SETTING_LIMITS } from '../../shared/settings.js';
 import { MAX_PUNCHES } from '../../shared/punches.js';
-import { HOUR_MS, punchWindow } from '../../shared/dates.js';
-import { LIMITS, type Day, type Priority } from '../../shared/api.js';
+import { HOUR_MS, MINUTE_MS, punchWindow } from '../../shared/dates.js';
+import { LIMITS, MEETINGS_PER_DAY, type Day, type Priority } from '../../shared/api.js';
 
 /** 2026-09-01's UTC midnight; the tests add hours to it, which keeps each time inside punchWindow('2026-09-01'). */
 const T0 = Date.UTC(2026, 8, 1);
@@ -33,6 +33,7 @@ describe('GET /api/days/:date', () => {
       workMinutes: null,
       snoozedUntil: {},
       offerAnsweredAt: null,
+      meetings: {},
       sessions: [],
       breaks: [],
     });
@@ -192,6 +193,56 @@ describe('PUT /api/days/:date/snooze', () => {
       expect([r.status, r.body]).toEqual([400, { error: 'until must be a time on that day.' }]);
     }
     expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
+  });
+});
+
+describe('PUT /api/days/:date/meetings', () => {
+  const put = (body?: unknown) => app.api.put('/api/days/2026-09-01/meetings', body);
+  const standup = { title: 'Standup', startsAt: T0 + 16 * HOUR_MS, endsAt: T0 + 16 * HOUR_MS + 15 * MINUTE_MS };
+
+  it('stores one meeting by its uid, keeps the others, and takes one off the day with null', async () => {
+    expect((await put({ uid: 'AAAA1111', meeting: { ...standup, title: '  Standup ' } })).body).toEqual({ meetings: { aaaa1111: standup } });
+    const call = { title: '', startsAt: T0 + 20 * HOUR_MS, endsAt: T0 + 21 * HOUR_MS };
+    expect((await put({ uid: 'bbbb2222', meeting: call })).body).toEqual({ meetings: { aaaa1111: standup, bbbb2222: call } });
+    const both = { aaaa1111: null, bbbb2222: call };
+    expect((await put({ uid: 'aaaa1111', meeting: null })).body).toEqual({ meetings: both });
+    expect((await app.api.get('/api/days/2026-09-01')).body.meetings).toEqual(both);
+    expect((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].meetings).toEqual(both);
+  });
+
+  it('cuts a long title', async () => {
+    const title = 'x'.repeat(LIMITS.meetingTitle + 5);
+    expect((await put({ uid: 'aaaa1111', meeting: { ...standup, title } })).body.meetings.aaaa1111.title).toBe('x'.repeat(LIMITS.meetingTitle));
+  });
+
+  it('refuses a bad uid, a meeting that is neither an object nor null, a title that is not text, and times off the day or out of order', async () => {
+    for (const uid of [undefined, 'x', 5, 'not-a-uid!']) {
+      const r = await put({ uid, meeting: standup });
+      expect([r.status, r.body]).toEqual([400, { error: "uid must be a meeting's id." }]);
+    }
+    for (const meeting of [undefined, 'Standup', [standup]]) {
+      const r = await put({ uid: 'aaaa1111', meeting });
+      expect([r.status, r.body]).toEqual([400, { error: 'meeting must be { title, startsAt, endsAt } or null.' }]);
+    }
+    for (const title of [undefined, 5]) {
+      const r = await put({ uid: 'aaaa1111', meeting: { ...standup, title } });
+      expect([r.status, r.body]).toEqual([400, { error: 'title must be text.' }]);
+    }
+    const { to } = punchWindow('2026-09-01');
+    for (const times of [{ startsAt: 'soon' }, { endsAt: to + 1 }, { endsAt: standup.startsAt }, { endsAt: standup.startsAt - 1 }]) {
+      const r = await put({ uid: 'aaaa1111', meeting: { ...standup, ...times } });
+      expect([r.status, r.body]).toEqual([400, { error: 'startsAt and endsAt must be times on that day, the end after the start.' }]);
+    }
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
+  });
+
+  it(`holds at most ${MEETINGS_PER_DAY} meetings, ones taken off included, and still changes one it holds`, async () => {
+    await put({ uid: 'aaaa1111', meeting: standup });
+    const full = Object.fromEntries(Array.from({ length: MEETINGS_PER_DAY }, (_, i) => [`m${String(i).padStart(7, '0')}`, null]));
+    app.db.prepare(`UPDATE days SET meetings = ? WHERE date = ?`).run(JSON.stringify(full), '2026-09-01');
+    const r = await put({ uid: 'aaaa1111', meeting: standup });
+    expect([r.status, r.body]).toEqual([400, { error: `A day holds at most ${MEETINGS_PER_DAY} meetings.` }]);
+    expect((await put({ uid: 'm0000000', meeting: standup })).body.meetings.m0000000).toEqual(standup);
   });
 });
 
@@ -367,6 +418,8 @@ describe('days are scoped to the signed-in user', () => {
     const until = Date.parse(date) + 12 * HOUR_MS;
     expect((await b.put(`/api/days/${date}/snooze`, { alarm: 'lunchBy', until })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/offer`)).status).toBe(200);
+    const meeting = { title: 'Mine', startsAt: until, endsAt: until + HOUR_MS };
+    expect((await b.put(`/api/days/${date}/meetings`, { uid: 'aaaa1111', meeting })).status).toBe(200);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
     const bDay = (await b.get(`/api/days/${date}`)).body;
     expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
@@ -375,6 +428,7 @@ describe('days are scoped to the signed-in user', () => {
     expect(bDay.workMinutes).toBe(240);
     expect(bDay.snoozedUntil).toEqual({ lunchBy: until });
     expect(bDay.offerAnsweredAt).toEqual(expect.any(Number));
+    expect(bDay.meetings).toEqual({ aaaa1111: meeting });
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
     // B naming the uid of a task of A's renames, ticks and removes B's own task of that uid,
     // whose sessions are B's: A's task, its rows and its time are as they were.
@@ -412,6 +466,11 @@ const writes = (day: string): [method: 'put' | 'post', path: string, body: unkno
   ['put', `${day}/overtime`, { approved: true }],
   // Noon UTC on the day itself: a constant would fall outside the far date's window, and a 400 from the body would prove nothing.
   ['put', `${day}/snooze`, { alarm: 'lunchBy', until: Date.parse(day.slice(-10)) + 12 * HOUR_MS }],
+  [
+    'put',
+    `${day}/meetings`,
+    { uid: 'aaaa1111', meeting: { title: 'x', startsAt: Date.parse(day.slice(-10)) + 12 * HOUR_MS, endsAt: Date.parse(day.slice(-10)) + 13 * HOUR_MS } },
+  ],
   ['put', `${day}/target`, { workMinutes: 240 }],
   ['put', `${day}/retro`, { note: 'x' }],
   ['put', `${day}/offer`, {}],

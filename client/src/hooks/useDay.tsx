@@ -3,7 +3,8 @@ import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import { mergePunches } from '../../../shared/punches.js';
-import type { AlarmId, Day, Priority, PruneResult, Punch, Session } from '../types';
+import { meetingTitle } from '../../../shared/text.js';
+import type { AlarmId, Day, Meeting, Priority, PruneResult, Punch, Session } from '../types';
 import { warnSaveFailed } from '../lib/alerts';
 import { ApiError, goneAt } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -121,6 +122,8 @@ interface DayStore {
   setOvertimeApproved: (date: string, approved: boolean) => Promise<boolean>;
   /** One alarm's snooze, the epoch ms it rings again; the other alarms' already shown, maybe another device's, stay. */
   setSnoozedUntil: (date: string, alarm: AlarmId, until: number) => Promise<boolean>;
+  /** One meeting by its uid, or null to take it off the day; the day's other meetings, maybe another device's, stay. */
+  setMeeting: (date: string, uid: string, meeting: Meeting | null) => Promise<boolean>;
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
   setRetro: (date: string, patch: api.RetroPatch) => Promise<boolean>;
@@ -575,6 +578,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [putDayFields],
   );
 
+  const setMeeting = useCallback(
+    (date: string, uid: string, meeting: Meeting | null) =>
+      putDayFields(
+        date,
+        (d) => ({ ...d, meetings: { ...d.meetings, [uid]: meeting && { ...meeting, title: meetingTitle(meeting.title) } } }),
+        () => api.putMeeting(date, uid, meeting),
+      ),
+    [putDayFields],
+  );
+
   const setWorkMinutes = useCallback(
     (date: string, minutes: number | null) =>
       putDayFields(
@@ -739,6 +752,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       prioritiesSaved,
       setOvertimeApproved,
       setSnoozedUntil,
+      setMeeting,
       setWorkMinutes,
       setRetro,
       setOfferAnswered,
@@ -763,6 +777,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       prioritiesSaved,
       setOvertimeApproved,
       setSnoozedUntil,
+      setMeeting,
       setWorkMinutes,
       setRetro,
       setOfferAnswered,
