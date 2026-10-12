@@ -37,7 +37,8 @@ export function useShortcut(id: ShortcutId, run: (() => void) | null): string | 
 }
 
 /**
- * The one keydown listener, on the window, so a field's and dnd-kit's own handlers run first. Not
+ * The one keydown listener that acts on a key, on the window, so a field's and dnd-kit's own
+ * handlers run first (the only other, `main.tsx`'s, unlocks the sound and acts on none). Not
  * before the settings have loaded, so a user who turned the keys off never has one act.
  */
 export function useShortcutListener(): void {

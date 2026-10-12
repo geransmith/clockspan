@@ -179,6 +179,11 @@ export const MIGRATIONS: Migration[] = [
   `ALTER TABLE items ADD COLUMN note TEXT NOT NULL DEFAULT ''`,
   // Each user's change number: every data write moves it on, and every data answer names it (app.ts).
   `ALTER TABLE users ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;`,
+  // A session's length at start and its real stop on a finish by hand; null on older rows.
+  `
+  ALTER TABLE sessions ADD COLUMN first_planned_seconds INTEGER;
+  ALTER TABLE sessions ADD COLUMN stopped_at INTEGER;
+  `,
 ];
 
 export function openDatabase(dbPath: string): DB {

@@ -39,7 +39,7 @@ export function AlarmsTab({ settings, set }: TabProps) {
           onChange={(p) => setAlarm('retro', p)}
         />
       </Section>
-      <Section title="How You're Alerted" hint="Every alarm also shows an in-app banner.">
+      <Section title="How You're Alerted" hint="Every alarm also shows an in-app banner. Alarms ring while Clockspan is open in a tab or the installed app.">
         <Toggle label="Sound" checked={settings.sound} onChange={(v) => set({ sound: v })} />
         <NotificationsRow enabled={settings.notifications} onChange={(v) => set({ notifications: v })} />
       </Section>
@@ -136,13 +136,15 @@ function NotificationsRow({ enabled, onChange }: { enabled: boolean; onChange: (
     setPerm(answer);
   };
   const hint =
-    perm === 'unsupported'
-      ? 'Not supported in this browser (on iPhone, add the app to your Home Screen first).'
-      : perm === 'denied'
-        ? 'Blocked in your browser settings for this site.'
-        : perm === 'granted'
-          ? 'Enabled in this browser.'
-          : 'Browser permission needed.';
+    perm === 'insecure'
+      ? 'Needs HTTPS. Over plain http, alarms are a sound and a banner.'
+      : perm === 'unsupported'
+        ? 'On iPhone, notifications work only from Clockspan added to the Home Screen.'
+        : perm === 'denied'
+          ? 'Blocked in your browser settings for this site.'
+          : perm === 'granted'
+            ? 'Enabled in this browser.'
+            : 'Not allowed in this browser yet. Until then, alarms are a sound and a banner.';
   return (
     <div className="setting-row" ref={row}>
       <Toggle label="Browser notifications" hint={hint} checked={enabled} onChange={onChange} />

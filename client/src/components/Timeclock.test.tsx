@@ -2,13 +2,15 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { type ComponentProps, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { playSound, unlockAudio } from '../lib/alerts';
+import { offerNotifications, playSound, unlockAudio } from '../lib/alerts';
 import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
-import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import type { WeekHours } from '../lib/week';
+import { deferredAnswer, makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
-import type { Punch } from '../types';
+import type { Punch, Settings } from '../types';
 import { Timeclock } from './Timeclock';
 
 vi.mock('../api');
@@ -20,7 +22,7 @@ function Card(props: Omit<ComponentProps<typeof Timeclock>, 'typing' | 'onTyping
   return <Timeclock {...props} typing={typing} onTyping={setTyping} />;
 }
 
-async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
+async function renderCard(date = TODAY, punches: Punch[] = punchesAt(), week: WeekHours | null = null) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
   const card = (p: Punch[], now = T0) => (
@@ -33,7 +35,7 @@ async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
         tc={dayTimeclock({ date, punches: p, workMinutes: null }, makeSettings(), TODAY, now)}
         overtimeApproved={false}
         workMinutes={null}
-        week={null}
+        week={week}
         focus={{ seconds: 0, count: 0 }}
         onChange={onChange}
         onOvertimeChange={vi.fn()}
@@ -53,6 +55,11 @@ const field = (label: string) => within(screen.getByRole('group', { name: `${lab
 const nowButton = () => screen.getByRole('button', { name: 'Now: Clock in' });
 const labels = () => [...document.querySelectorAll('.punch-label')].map((l) => l.textContent);
 const focus = (el: HTMLElement) => act(() => el.focus());
+/** A key typed into the focused segment, as `TimeField.test.tsx` types it. */
+const typeKey = (data: string) =>
+  act(() => {
+    document.activeElement!.dispatchEvent(new InputEvent('beforeinput', { data, inputType: 'insertText', bubbles: true, cancelable: true }));
+  });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -143,6 +150,34 @@ describe('Timeclock', () => {
     expect(tile().querySelector('.tile-sub')).toBeNull();
   });
 
+  it("asks for notifications on today's Clock in, in the tap before the save", async () => {
+    const { onChange } = await renderCard();
+    fireEvent.click(nowButton());
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
+    expect(vi.mocked(unlockAudio).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(offerNotifications).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]!);
+  });
+
+  it('asks for nothing before the settings have loaded, since the switch may be off', async () => {
+    vi.mocked(api.getSettings).mockReturnValue(deferredAnswer<Settings>().promise);
+    await renderCard();
+    fireEvent.click(nowButton());
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('asks for nothing on another punch, on × or on a Clock in typed on another day', async () => {
+    const { onChange } = await renderCard(TODAY, punchesAt(T0 - HOUR_MS));
+    fireEvent.click(screen.getByRole('button', { name: 'Now: Lunch out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Clock in' }));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    cleanup();
+    const yesterday = await renderCard(YESTERDAY, punchesAt(null));
+    focus(field('Clock in'));
+    for (const key of ['8', '3', '0']) typeKey(key);
+    expect(yesterday.onChange).toHaveBeenCalled();
+    expect(offerNotifications).not.toHaveBeenCalled();
+  });
+
   it('undoes an Add removed before any punch changes', async () => {
     // Clocked out at 9:00, then "Add Extra Out / In": removing that pair gives the Clock out its 9:00 back.
     const day = punchesAt(T0 - HOUR_MS, null, null, T0);
@@ -216,5 +251,19 @@ describe('Timeclock', () => {
     // Yesterday from 8:00 and never clocked out: judged at its end, 16 h in.
     await renderCard(YESTERDAY, punchesAt(T0 - 25 * HOUR_MS));
     expect(screen.queryByText(/Second meal period/)).toBeNull();
+  });
+
+  it('names the days this week left clocked in last on the week line', async () => {
+    const week = (unclosed: string[]): WeekHours => ({ workedSeconds: 26 * 3600, targetSeconds: 40 * 3600, met: false, overSeconds: 0, unclosed });
+    const line = () => screen.getByText(/^This week/).textContent;
+    // TODAY is a Monday, so these are the week before's Monday and Tuesday.
+    await renderCard(TODAY, punchesAt(), week([]));
+    expect(line()).toBe('This week 26h 00m of 40h 00m');
+    cleanup();
+    await renderCard(TODAY, punchesAt(), week(['2026-09-22']));
+    expect(line()).toMatch(/ · Tue has no clock-out$/);
+    cleanup();
+    await renderCard(TODAY, punchesAt(), week(['2026-09-21', '2026-09-22']));
+    expect(line()).toMatch(/ · Mon, Tue have no clock-out$/);
   });
 });

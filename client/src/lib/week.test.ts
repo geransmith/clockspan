@@ -22,12 +22,18 @@ describe('weekHours', () => {
       targetSeconds: 40 * 3600,
       met: false,
       overSeconds: 0,
+      unclosed: [],
     });
   });
 
-  it('stops a past day left clocked in at the end of that day, as its sheet does', () => {
+  it('leaves out a past day left clocked in and names it, as its sheet shows no worked time', () => {
     const open = day('2026-09-28', null);
-    expect(weekHours([open], settings, TODAY, NOW).workedSeconds).toBe(16 * 3600 - 1);
+    expect(weekHours([open, day('2026-09-29', 7.5)], settings, TODAY, NOW)).toMatchObject({ workedSeconds: 7.5 * 3600, unclosed: ['2026-09-28'] });
+  });
+
+  it('names every day left clocked in, in date order', () => {
+    const days = [day('2026-09-28', null), day('2026-09-29', null), day(TODAY, null)];
+    expect(weekHours(days, settings, TODAY, NOW)).toMatchObject({ workedSeconds: 4 * 3600, unclosed: ['2026-09-28', '2026-09-29'] });
   });
 
   it('leaves out a day with punches out of order, as its sheet shows no worked time', () => {
@@ -35,10 +41,19 @@ describe('weekHours', () => {
     // Lunch in typed before lunch out.
     const slipped = makeDay('2026-09-28', { punches: punchesAt(start, start + 3 * HOUR_MS, start + 2 * HOUR_MS, start + 8 * HOUR_MS) });
     expect(weekHours([slipped, day('2026-09-29', 7.5)], settings, TODAY, NOW).workedSeconds).toBe(7.5 * 3600);
+    // With no Clock out either, it is still the punch-order check's, not a day left clocked in.
+    const open = makeDay('2026-09-28', { punches: punchesAt(start, start + 3 * HOUR_MS, start + 2 * HOUR_MS, null) });
+    expect(weekHours([open], settings, TODAY, NOW)).toMatchObject({ workedSeconds: 0, unclosed: [] });
   });
 
   it('reports a target of nothing when the week line is off', () => {
-    expect(weekHours([], { ...settings, weekMinutes: 0 }, TODAY, NOW)).toEqual({ workedSeconds: 0, targetSeconds: 0, met: false, overSeconds: 0 });
+    expect(weekHours([], { ...settings, weekMinutes: 0 }, TODAY, NOW)).toEqual({
+      workedSeconds: 0,
+      targetSeconds: 0,
+      met: false,
+      overSeconds: 0,
+      unclosed: [],
+    });
     // Hours with no target are not over anything.
     expect(weekHours([day('2026-09-28', 8)], { ...settings, weekMinutes: 0 }, TODAY, NOW).overSeconds).toBe(0);
   });

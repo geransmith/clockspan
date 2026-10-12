@@ -119,7 +119,10 @@ interface RangeReview {
   retrosDone: number;
   /** Completed focus sessions. */
   sessions: number;
-  /** The clocked-in days' own work-day lengths added up (`daySettings`): a month's or a quarter's target (`periodTarget`). */
+  /**
+   * The clocked-in days' own work-day lengths added up (`daySettings`; a day out of order or left
+   * clocked in is left out): a month's or a quarter's target (`periodTarget`).
+   */
   targetSeconds: number;
   /** Timer breaks, a running one so far. */
   breaks: { count: number; seconds: number };
@@ -134,6 +137,12 @@ interface RangeReview {
    * fewer than two such days.
    */
   typicalDay: { planned: number; done: number } | null;
+  /**
+   * How long sessions typically ran (the median `ranSeconds`, today's included) for the one or two
+   * lengths they started with (`firstPlannedSeconds`) that have three or more sessions finished by
+   * hand, the most used first.
+   */
+  typicalRuns: { firstPlannedSeconds: number; ranSeconds: number }[];
   /**
    * The focus and the ticks by category, most time first, then the most ticks, and no category
    * last. A category with neither is left out; the sums are `focusedSeconds`, `offPlanSeconds`
@@ -152,15 +161,15 @@ interface RangeReview {
 
 /**
  * Roll a range of full days up into one review. Worked time comes from the same timeclock
- * math as the sheet, frozen for past days, with a day whose punches are out of order left out of
- * it and of `targetSeconds`, and break time by the day log's math
- * (`breakSeconds`, a running break up to now); the plan and the focus reuse `reviewDay`. A day
- * after today is left out: none of it has happened yet. A day with nothing on it (`hasContent`)
- * is left out too, even with a break logged. A recurring priority's rows count as priorities in
- * every total and go to `routines` rather than Not Done. `known` is the uids of the board's
- * categories, removed ones included: a category outside it (none before the board's first read)
- * counts as none, in `byCategory` and in `midDay`. `laned` is the uids of the tasks the board
- * holds in Later or Next, which Not Done never joins to another task by its text.
+ * math as the sheet, frozen for past days, with a day whose punches are out of order, or an
+ * earlier day left clocked in (`unclosed`), left out of it and of `targetSeconds`, and break time
+ * by the day log's math (`breakSeconds`, a running break up to now); the plan and the focus reuse
+ * `reviewDay`. A day after today is left out: none of it has happened yet. A day with nothing on
+ * it (`hasContent`) is left out too, even with a break logged. A recurring priority's rows count
+ * as priorities in every total and go to `routines` rather than Not Done. `known` is the uids of
+ * the board's categories, removed ones included: a category outside it (none before the board's
+ * first read) counts as none, in `byCategory` and in `midDay`. `laned` is the uids of the tasks
+ * the board holds in Later or Next, which Not Done never joins to another task by its text.
  */
 export function reviewRange(
   days: Day[],
@@ -184,6 +193,7 @@ export function reviewRange(
     breaks: { count: 0, seconds: 0 },
     midDay: { added: 0, done: 0, categoryUid: null },
     typicalDay: null,
+    typicalRuns: [],
     byCategory: [],
     unplanned: [],
     routines: [],
@@ -208,15 +218,18 @@ export function reviewRange(
   // Rows written and ticked on each finished day with a plan, for the typical day.
   const plannedRows: number[] = [];
   const doneRows: number[] = [];
+  // Each first length's runs, met first, first in the map: the sort keeps that order on a tie.
+  const runs = new Map<number, number[]>();
   let onPlan = 0;
   for (const day of days.filter((d) => d.date <= today).sort((a, b) => a.date.localeCompare(b.date))) {
     if (!hasContent(day)) continue;
     const tc = dayTimeclock(day, settings, today, now);
     const r = reviewDay(day.priorities, day.sessions);
     out.days++;
-    // A day with punches out of order has no worked time to trust (its sheet shows a dash), so it
-    // is left out of the hours and of the target they are held to.
-    if (!tc.outOfOrder) {
+    // A day with punches out of order, or an earlier one left clocked in, has no worked time to
+    // trust (its sheet shows a dash), so it is left out of the hours and of the target they are
+    // held to.
+    if (!tc.outOfOrder && !tc.unclosed) {
       out.workedSeconds += tc.workedSeconds;
       if (tc.clockIn != null) out.targetSeconds += daySettings(settings, day).workMinutes * 60;
     }
@@ -249,6 +262,12 @@ export function reviewRange(
       plannedRows.push(r.total);
       doneRows.push(r.done);
     }
+    for (const s of day.sessions) {
+      if (s.firstPlannedSeconds == null || s.ranSeconds == null) continue;
+      let ran = runs.get(s.firstPlannedSeconds);
+      if (!ran) runs.set(s.firstPlannedSeconds, (ran = []));
+      ran.push(s.ranSeconds);
+    }
     const routineRows = r.planned.filter((p) => p.priority.recurring);
     const oneOffs = r.planned.filter((p) => !p.priority.recurring);
     addRoutines(routines, routineRows, day.date);
@@ -260,6 +279,11 @@ export function reviewRange(
   if (out.focusedSeconds > 0) out.onPlanPercent = Math.round((onPlan / out.focusedSeconds) * 100);
   // One planned day is that day, not a typical one.
   if (plannedRows.length > 1) out.typicalDay = { planned: median(plannedRows), done: median(doneRows) };
+  out.typicalRuns = [...runs]
+    .filter(([, ran]) => ran.length >= 3)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 2)
+    .map(([firstPlannedSeconds, ran]) => ({ firstPlannedSeconds, ranSeconds: median(ran) }));
   // More than half, so at most one category can be named.
   for (const [uid, count] of midDayCategories) if (count * 2 > out.midDay.added) out.midDay.categoryUid = uid;
   const listed = [...byCategory.values()].filter((c) => c.seconds > 0 || c.done > 0);
@@ -361,7 +385,7 @@ export function periodTarget(kind: PeriodKind, r: Pick<RangeReview, 'targetSecon
 
 /**
  * The middle of `values`, or halfway between the middle two rounded half up, so a typical day
- * is whole rows. With an odd count both indexes are the middle one.
+ * is whole rows and a typical run whole seconds. With an odd count both indexes are the middle one.
  */
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);

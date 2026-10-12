@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atTime, MINUTE_MS, pad2 } from '../../../shared/dates.js';
 import { punchesAt, TEST_SETTINGS } from '../test/fixtures';
-import { CHECK_PUNCHES } from './copy';
+import { CHECK_PUNCHES, NO_CLOCK_OUT } from './copy';
 import type { Punch, Settings } from '../types';
 import { addPunchPair, clampToDay, computeTimeclock, dayTimeclock } from './timeclock';
 import { clockBarItems, focusTile, timeclockTiles, type TileOptions } from './tiles';
@@ -164,17 +164,18 @@ describe('Clock out at', () => {
 });
 
 describe('a past day', () => {
-  it('left clocked in shows an amber dash for the clock-out (the pill says why), a lunch not taken and nothing live', () => {
+  it('left clocked in shows a dash and No clock-out for Worked, an amber dash for the clock-out and a lunch not taken', () => {
+    const noClockOut = { value: '—', sub: NO_CLOCK_OUT, tone: '' };
     expect(pastTiles(clockedIn)).toEqual({
       lunch: { value: '13:00', sub: 'Not taken', tone: '' },
-      worked: { value: '15h 59m', sub: '7h 59m over target', tone: '' },
+      worked: noClockOut,
       clockOut: { value: '—', sub: '', tone: 'tile--warn' },
     });
     // Clocked in late enough to stay short of the target by midnight.
     const late = pastTiles(punchesAt(at(20)));
     expect(late.clockOut).toEqual({ value: '—', sub: '', tone: 'tile--warn' });
     expect(late.lunch.sub).toBe('Not taken');
-    expect(late.worked.sub).toBe('4h 01m under target');
+    expect(late.worked).toEqual(noClockOut);
     // A half day needs no lunch; the sheet of a past one doesn't say "today".
     expect(pastTiles(punchesAt(at(8), null, null, at(12, 30)), 270).lunch.sub).toBe('Not needed');
   });

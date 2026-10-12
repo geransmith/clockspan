@@ -93,11 +93,13 @@ function Body({ days, today, now, kind, onOpen }: { days: Day[]; today: string; 
   // A session finished within its first second logs no time, so there can be sessions and no share.
   const sessions = counted(r.sessions, 'session') + (r.onPlanPercent == null ? '' : ` · ${r.onPlanPercent}% on plan`);
   const typical = kind === 'quarter' ? null : r.typicalDay;
+  const runs = kind === 'quarter' ? [] : r.typicalRuns;
   const mostly = categoryOf(categories, r.midDay.categoryUid);
   const facts: { label: string; value: string }[] = [];
   if (r.midDay.added > 0) facts.push({ label: 'Added mid-day', value: `${r.midDay.added} · ${r.midDay.done} done${mostly ? ` · mostly ${mostly.name}` : ''}` });
   if (r.breaks.count > 0) facts.push({ label: 'Breaks', value: `${r.breaks.count} · ${formatDuration(r.breaks.seconds)}` });
   if (typical) facts.push({ label: 'Typical day', value: `${typical.planned} planned · ${typical.done} done` });
+  for (const run of runs) facts.push({ label: `${formatDuration(run.firstPlannedSeconds)} timers`, value: `typically ran ${formatDuration(run.ranSeconds)}` });
 
   return (
     <div className="review-body">

@@ -66,9 +66,9 @@ const storedUser = (id: number | null): string => (id === null ? '' : String(id)
 /** The stored values that hold one user's state, each dropped as a prefix. A new one joins this list. */
 export const USER_KEYS = {
   /**
-   * Today's fired alarm keys (`useAlarms`), each naming an alarm and a minute: another user's
-   * would silence this one's. As a prefix it also takes the `focus:alarms:<date>` keys an
-   * earlier version kept.
+   * Today's fired alarm keys (`useAlarms`), each naming an alarm and a minute, and
+   * `clockIn:missing` for the "Not Clocked In" banner: another user's would silence this one's.
+   * As a prefix it also takes the `focus:alarms:<date>` keys an earlier version kept.
    */
   alarms: 'focus:alarms',
   /** The date Start Fresh was pressed: another user's would hide this one's "Still Open From …" and "Up Next". */

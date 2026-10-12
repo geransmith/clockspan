@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useBecameTrue, useCelebration } from '../hooks/useCelebration';
 import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
-import { unlockAudio } from '../lib/alerts';
+import { offerNotifications, unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { DAY_COMPLETE, SECOND_MEAL_NOTE } from '../lib/copy';
+import { DAY_COMPLETE, NO_CLOCK_OUT, SECOND_MEAL_NOTE } from '../lib/copy';
 import { focusNeighbour } from '../lib/focus';
-import { floorToMinute, formatDuration } from '../lib/format';
+import { floorToMinute, formatDuration, formatWeekday } from '../lib/format';
 import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
@@ -97,8 +97,10 @@ export function Timeclock({
   };
   const setAt = (position: number, at: number | null) => {
     // A punch is typed or tapped: the gesture iOS wants before any sound, so the day-complete
-    // clip (played as the change renders) and the day's alarms can be heard.
+    // clip (played as the change renders) and the day's alarms can be heard. Today's Clock in is
+    // where the day's alarms start, so it asks for notifications too, in the same gesture.
     unlockAudio();
+    if (isToday && position === 0 && at !== null) offerNotifications(loaded && settings.notifications);
     send(punches.map((p) => (p.position === position ? { ...p, at } : p)));
   };
   // The rows from before the last "Add Extra Out / In". Removing the pair it made while the rows
@@ -187,8 +189,9 @@ export function Timeclock({
   const clockOutPos = clockOutPosition(punches);
 
   const lunchRows = lunchRowsShown(punches, settings);
-  // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap.
-  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings)) : null;
+  // Today, until the day is done, the next empty row's Now is the filled button: one obvious tap,
+  // none while an appointment typed ahead would make it an early Clock out.
+  const nextPos = isToday && tc.state !== 'done' ? nextPunchPosition(punches, lunchInPunchOrder(punches, tc, settings), now) : null;
   const name = (position: number) => punchLabel(punches, position, pairs);
   const row = (punch: Punch, label: string) => (
     <PunchRow
@@ -287,24 +290,14 @@ export function Timeclock({
               {formatDuration(week.overSeconds)} {otFeature ? 'over' : 'past'}
             </>
           )}
+          {week.unclosed.length > 0 && (
+            <>
+              {' · '}
+              {week.unclosed.map(formatWeekday).join(', ')} {week.unclosed.length > 1 ? 'have' : 'has'} {NO_CLOCK_OUT.toLowerCase()}
+            </>
+          )}
           <Burst at={weekBurst} />
         </p>
-      )}
-
-      <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
-
-      {otFeature && (
-        <Toggle
-          className="ot-row"
-          label="Overtime approved"
-          hint={
-            overtimeApproved
-              ? `Clock-out alarm is off for this day.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
-              : 'Silences the clock-out alarm for this day.'
-          }
-          checked={overtimeApproved}
-          onChange={onOvertimeChange}
-        />
       )}
 
       <div className="punches" ref={punchBox}>
@@ -321,6 +314,22 @@ export function Timeclock({
           </button>
         )}
       </div>
+
+      <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
+
+      {otFeature && (
+        <Toggle
+          className="ot-row"
+          label="Overtime approved"
+          hint={
+            overtimeApproved
+              ? `Clock-out alarm is off for this day.${settings.mealRules ? ' Meal alarms stay on.' : ''}`
+              : 'Silences the clock-out alarm for this day.'
+          }
+          checked={overtimeApproved}
+          onChange={onOvertimeChange}
+        />
+      )}
     </div>
   );
 }

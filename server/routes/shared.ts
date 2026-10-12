@@ -91,9 +91,13 @@ interface SessionRowFields {
   date: string;
   label: string;
   planned_seconds: number;
+  /** The plan it started with; null on rows from before the column. */
+  first_planned_seconds: number | null;
   started_at: number;
   paused_seconds: number;
   paused_at: number | null;
+  /** When a finish by hand stopped it, before the clamp to its plan; null otherwise. */
+  stopped_at: number | null;
   /** The task; null for an unplanned session. */
   item_id: number | null;
   /** The category picked in the log, or kept from a task it lost; read only while it has no task. */
@@ -258,7 +262,9 @@ export function sessionRowToJson(s: SessionRow): Session {
     priorityUid: s.item_uid,
     title: s.item_title,
     categoryUid: s.category,
+    firstPlannedSeconds: s.first_planned_seconds,
   };
-  if (s.status === 'running') return { ...fields, status: 'running', endedAt: null, durationSeconds: null };
-  return { ...fields, status: s.status, endedAt: s.ended_at, durationSeconds: Math.round(activeMs(fields, s.ended_at) / 1000) };
+  const ranSeconds = s.stopped_at == null ? null : Math.round(activeMs(fields, s.stopped_at) / 1000);
+  if (s.status === 'running') return { ...fields, ranSeconds, status: 'running', endedAt: null, durationSeconds: null };
+  return { ...fields, ranSeconds, status: s.status, endedAt: s.ended_at, durationSeconds: Math.round(activeMs(fields, s.ended_at) / 1000) };
 }
