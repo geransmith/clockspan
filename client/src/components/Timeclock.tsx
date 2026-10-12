@@ -4,9 +4,9 @@ import { useSettings } from '../hooks/useSettings';
 import { useTimeFormat } from '../hooks/useTimeFormat';
 import { unlockAudio } from '../lib/alerts';
 import { pickCelebration } from '../lib/celebrate';
-import { DAY_COMPLETE, SECOND_MEAL_NOTE } from '../lib/copy';
+import { DAY_COMPLETE, NO_CLOCK_OUT, SECOND_MEAL_NOTE } from '../lib/copy';
 import { focusNeighbour } from '../lib/focus';
-import { floorToMinute, formatDuration } from '../lib/format';
+import { floorToMinute, formatDuration, formatWeekday } from '../lib/format';
 import { focusTile, timeclockTiles } from '../lib/tiles';
 import {
   addPunchPair,
@@ -285,6 +285,12 @@ export function Timeclock({
             <>
               {' · '}
               {formatDuration(week.overSeconds)} {otFeature ? 'over' : 'past'}
+            </>
+          )}
+          {week.unclosed.length > 0 && (
+            <>
+              {' · '}
+              {week.unclosed.map(formatWeekday).join(', ')} {week.unclosed.length > 1 ? 'have' : 'has'} {NO_CLOCK_OUT.toLowerCase()}
             </>
           )}
           <Burst at={weekBurst} />

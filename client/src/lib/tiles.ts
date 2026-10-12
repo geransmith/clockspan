@@ -1,5 +1,5 @@
 import type { AlarmSettings, Settings } from '../types';
-import { CHECK_PUNCHES } from './copy';
+import { CHECK_PUNCHES, NO_CLOCK_OUT } from './copy';
 import { counted, formatDuration, formatDurationCeil } from './format';
 import type { TimeclockResult } from './timeclock';
 
@@ -57,14 +57,14 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
     const check: TileView = { value: '—', sub: CHECK_PUNCHES, tone: '' };
     return { lunch, worked: check, clockOut: check };
   }
+  if (tc.unclosed) {
+    // A past day still clocked in at its end was never clocked out: no number to trust. The
+    // sheet's pill says so too; the board's clock bar is always today's and never gets here.
+    return { lunch, worked: { value: '—', sub: NO_CLOCK_OUT, tone: '' }, clockOut: { value: '—', sub: '', tone: 'tile--warn' } };
+  }
 
   const clockOut: TileView = { value: '—', sub: 'Clock in to see your end time', tone: '' };
-  if (!o.isToday && tc.state === 'working') {
-    // A past day is judged at its end, so one still working there was never clocked out. The
-    // sheet's pill says so; the board's clock bar is always today's and never gets here.
-    clockOut.sub = '';
-    clockOut.tone = 'tile--warn';
-  } else if (tc.clockOutAt != null) {
+  if (tc.clockOutAt != null) {
     const secs = (tc.clockOutAt - o.now) / 1000;
     clockOut.value = o.formatTime(tc.clockOutAt);
     if (tc.clockOutStatus === 'done') {
@@ -102,11 +102,10 @@ export function timeclockTiles(tc: TimeclockResult, o: TileOptions): { lunch: Ti
           ? `${formatDuration(tc.overSeconds)} over target`
           : tc.remainingSeconds === 0
             ? 'On target'
-            : tc.state === 'done' || !o.isToday
+            : tc.state === 'done'
               ? `${formatDurationCeil(tc.remainingSeconds)} under target`
               : `${formatDurationCeil(tc.remainingSeconds)} to go`,
-    // A past day left clocked in is judged at its end: nothing about it is live.
-    tone: o.isToday && tc.state === 'working' ? 'tile--live' : '',
+    tone: tc.state === 'working' ? 'tile--live' : '',
   };
 
   return { lunch, worked, clockOut };
