@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CATEGORY_COLORS } from '../../../shared/api.js';
 import { BOARD_COLUMNS_QUERY, SPLIT_QUERY } from './layout';
@@ -176,11 +176,15 @@ describe('styles.css', () => {
     expect(rules.split('\n').filter((line) => COLOUR.test(line))).toEqual([]);
   });
 
-  // A misspelt or guessed token (var(--space-5)) drops its declaration without an error. The burst's
-  // pieces get --delay, --dx, --dy and --rot from Burst.tsx.
+  // A misspelt or guessed token (var(--space-5)) drops its declaration without an error, in the
+  // stylesheet or in a style set from the code. The burst's pieces get --delay, --dx, --dy and --rot
+  // from Burst.tsx.
   it('defines every custom property it reads', () => {
+    const code = readdirSync(new URL('..', import.meta.url), { recursive: true, encoding: 'utf8' })
+      .filter((file) => /\.tsx?$/.test(file) && !file.includes('.test.'))
+      .map((file) => read(`../${file}`));
     const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map(([, name]) => name));
-    const read = new Set([...css.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name!));
-    expect([...read].filter((name) => !defined.has(name)).sort()).toEqual(['--delay', '--dx', '--dy', '--rot']);
+    const reads = new Set([css, ...code].flatMap((text) => [...text.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name!)));
+    expect([...reads].filter((name) => !defined.has(name)).sort()).toEqual(['--delay', '--dx', '--dy', '--rot']);
   });
 });

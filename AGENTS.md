@@ -1229,7 +1229,7 @@ fixture, a seed template): after it, fix what `npm run typecheck` lists.
   compact control joins that block and sets its `--hit-inset` there (`theme-css.test.ts` checks).
   A toggle's on state is styled from its ARIA attribute (`[aria-pressed='true']`,
   `[aria-selected='true']`), never a parallel `is-on` / `is-active` class (`theme-css.test.ts`
-  checks). Inputs are 16 px (`--fs-base`) so iOS doesn't zoom. No external fonts or assets (the CSP would block
+  checks). Inputs are 16 px (`--fs-field`) so iOS doesn't zoom. No external fonts or assets (the CSP would block
   them anyway). Safe-area insets via `--safe-top`, `--safe-bottom`, `--safe-left` and
   `--safe-right` (a phone held sideways puts the notch on a side). Words in a tone's colour use its
   `-ink` token (`--accent-ink`, `--ok-ink`, `--warn-ink`, `--danger-ink`), which keeps light-mode
