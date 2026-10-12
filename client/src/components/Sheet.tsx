@@ -24,6 +24,7 @@ import { CardFrame, type SheetCard } from './CardFrame';
 import { DateNav } from './DateNav';
 import { FocusTimer } from './FocusTimer';
 import { LoadFailed } from './LoadFailed';
+import { Meetings } from './Meetings';
 import { Priorities } from './Priorities';
 import { Retro } from './Retro';
 import { SessionLog } from './SessionLog';
@@ -210,6 +211,8 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
         );
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} pick={pick} />;
+      case 'meetings':
+        return <Meetings date={date} meetings={day.meetings} onSet={(uid, m) => void store.setMeeting(date, uid, m)} />;
       case 'log':
         return (
           <SessionLog

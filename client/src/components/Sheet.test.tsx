@@ -136,7 +136,7 @@ describe('Sheet', () => {
     expect(document.querySelector('.sheet--split')).not.toBeNull();
     expect(columns()).toEqual([
       ['Timeclock', 'Top Priorities'],
-      ['Focus Timer', 'Day Log', 'Retrospective'],
+      ['Focus Timer', 'Meetings', 'Day Log', 'Retrospective'],
     ]);
   });
 
@@ -144,7 +144,7 @@ describe('Sheet', () => {
     media.delete(SPLIT_QUERY);
     await renderSheet();
     expect(document.querySelector('.sheet--split')).toBeNull();
-    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log', 'Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Meetings', 'Day Log', 'Retrospective']]);
   });
 
   it('keeps the columns it mounted with when the window changes width', async () => {
@@ -163,10 +163,10 @@ describe('Sheet', () => {
     await renderSheet(true);
     fireEvent.click(button('Move Focus Timer to the left column'));
     await settle();
-    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'timer:left', 'log:right', 'retro:right']);
+    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'timer:left', 'meetings:right', 'log:right', 'retro:right']);
     expect(columns()).toEqual([
       ['Timeclock', 'Top Priorities', 'Focus Timer'],
-      ['Day Log', 'Retrospective'],
+      ['Meetings', 'Day Log', 'Retrospective'],
     ]);
     // The card mounted again in its new column; its arrow there has the focus.
     expect(document.activeElement).toBe(button('Move Focus Timer to the right column'));
@@ -257,13 +257,13 @@ describe('Sheet', () => {
     // Third in the layout, but first in the right column.
     expect(button('Move Focus Timer up').disabled).toBe(true);
     expect(button('Move Top Priorities down').disabled).toBe(true);
-    act(() => button('Move Day Log up').focus());
-    fireEvent.click(button('Move Day Log up'));
+    act(() => button('Move Meetings up').focus());
+    fireEvent.click(button('Move Meetings up'));
     await settle();
-    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'log:right', 'timer:right', 'retro:right']);
-    expect(columns()[1]).toEqual(['Day Log', 'Focus Timer', 'Retrospective']);
+    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'meetings:right', 'timer:right', 'log:right', 'retro:right']);
+    expect(columns()[1]).toEqual(['Meetings', 'Focus Timer', 'Day Log', 'Retrospective']);
     // At the top of its column the up arrow is off, so the down arrow has the focus.
-    expect(document.activeElement).toBe(button('Move Day Log down'));
+    expect(document.activeElement).toBe(button('Move Meetings down'));
   });
 
   it('keeps a drop inside the column it was dragged in', async () => {
@@ -275,8 +275,8 @@ describe('Sheet', () => {
       .at(-1)!;
     act(() => right.onReorder(0, right.cards.length - 1));
     await settle();
-    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'log:right', 'retro:right', 'timer:right']);
-    expect(columns()[1]).toEqual(['Day Log', 'Retrospective', 'Focus Timer']);
+    expect(savedLayout()).toEqual(['timeclock:left', 'priorities:left', 'meetings:right', 'log:right', 'retro:right', 'timer:right']);
+    expect(columns()[1]).toEqual(['Meetings', 'Day Log', 'Retrospective', 'Focus Timer']);
   });
 
   it('offers no column moves in a narrow window', async () => {
@@ -290,10 +290,10 @@ describe('Sheet', () => {
     stored = makeSettings({ layout: stored.layout.map((l) => ({ ...l, side: 'left' })) });
     await renderSheet(true);
     expect(document.querySelector('.sheet--split')).toBeNull();
-    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log', 'Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Meetings', 'Day Log', 'Retrospective']]);
     fireEvent.click(button('Move Retrospective to the right column'));
     await settle();
-    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Day Log'], ['Retrospective']]);
+    expect(columns()).toEqual([['Timeclock', 'Top Priorities', 'Focus Timer', 'Meetings', 'Day Log'], ['Retrospective']]);
   });
 });
 

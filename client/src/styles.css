@@ -1338,6 +1338,72 @@ button {
   align-self: flex-start;
   color: var(--accent-ink);
 }
+/* Meetings: on a phone a row is its times and × with the title under them, a hairline between
+   meetings; from 640 px one line each. */
+.meetings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+.meeting-row + .meeting-row {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-8);
+}
+.meeting-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-6);
+}
+.meeting-times {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+.meeting-times .timefield {
+  flex: 1;
+}
+.meeting-row .meeting-title,
+.meeting-row .error {
+  grid-column: 1 / -1;
+}
+.meeting-remove {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--text-3);
+}
+.meeting-new {
+  grid-template-columns: 1fr;
+}
+.meeting-new-actions {
+  display: flex;
+  gap: var(--space-6);
+}
+.meeting-add {
+  align-self: flex-start;
+  color: var(--accent-ink);
+}
+@media (min-width: 640px) {
+  .meeting-row {
+    grid-template-columns: auto 1fr auto;
+  }
+  .meeting-row + .meeting-row {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .meeting-row .meeting-title {
+    grid-column: auto;
+  }
+  .meeting-remove {
+    grid-column: 3;
+  }
+  .meeting-new {
+    grid-template-columns: 1fr auto;
+  }
+  .meeting-new .meeting-title {
+    grid-column: 1 / -1;
+  }
+}
 .punch-clear,
 .punch-remove {
   color: var(--text-3);

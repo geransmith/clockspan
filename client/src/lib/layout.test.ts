@@ -82,7 +82,7 @@ describe('patchCard', () => {
 describe('splitColumns', () => {
   it("gives each column its visible cards in the layout's order", () => {
     expect(ids(splitColumns(TEST_SETTINGS.layout)?.left)).toEqual(['timeclock', 'priorities']);
-    expect(ids(splitColumns(TEST_SETTINGS.layout)?.right)).toEqual(['timer', 'log', 'retro']);
+    expect(ids(splitColumns(TEST_SETTINGS.layout)?.right)).toEqual(['timer', 'meetings', 'log', 'retro']);
     // A hidden card stays out of its column.
     expect(ids(splitColumns(LAYOUT)?.left)).toEqual(['timeclock']);
   });

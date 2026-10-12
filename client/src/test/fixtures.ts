@@ -42,7 +42,7 @@ export const YESTERDAY = '2026-09-27';
 export const MIDNIGHT = new Date(2026, 8, 28).getTime();
 
 /** Each card's column in TEST_SETTINGS, written out like the rest; the type makes a missing card an error. */
-const TEST_SIDES: Record<CardId, CardSide> = { timeclock: 'left', priorities: 'left', timer: 'right', log: 'right', retro: 'right' };
+const TEST_SIDES: Record<CardId, CardSide> = { timeclock: 'left', priorities: 'left', timer: 'right', meetings: 'right', log: 'right', retro: 'right' };
 
 /**
  * The settings every test starts from. Written out rather than taken from `DEFAULT_SETTINGS`,

@@ -8,6 +8,7 @@ export const CARD_TITLES: Record<CardId, string> = {
   timeclock: 'Timeclock',
   priorities: 'Top Priorities',
   timer: 'Focus Timer',
+  meetings: 'Meetings',
   log: 'Day Log',
   retro: 'Retrospective',
 };

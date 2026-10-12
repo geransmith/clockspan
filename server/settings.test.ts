@@ -41,11 +41,12 @@ describe('mergeSettings', () => {
       ['timeclock', false, 'right'],
       ['log', true, 'right'],
       ['priorities', true, 'left'],
+      ['meetings', true, 'right'],
       ['retro', true, 'right'],
     ]);
     // A row stored before the columns: every card takes its default, with no migration.
     const old = mergeSettings(DEFAULT_SETTINGS, { layout: [{ id: 'retro', visible: false }] }).layout;
-    expect(old.map((l) => l.side)).toEqual(['right', 'left', 'left', 'right', 'right']);
+    expect(old.map((l) => l.side)).toEqual(['right', 'left', 'left', 'right', 'right', 'right']);
     // A save that leaves the layout out keeps the stored columns.
     const stored = { ...DEFAULT_SETTINGS, layout: merged };
     expect(mergeSettings(stored, { sound: false }).layout).toBe(merged);
