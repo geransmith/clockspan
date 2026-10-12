@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { alert, dismissByTag } from '../lib/alerts';
 import { formatTime, resolveHour12 } from '../lib/format';
 import { computeTimeclock, type TimeclockResult } from '../lib/timeclock';
 import { MINUTE_MS } from '../../../shared/dates.js';
-import { makeSettings, punchesAt, T0, TODAY } from '../test/hooks';
+import { makeSettings, punchesAt, setVisibility, T0, TODAY } from '../test/hooks';
 import type { Settings } from '../types';
 import { useAlarms, type AlarmDayState } from './useAlarms';
 
@@ -173,6 +173,8 @@ describe('missed clock-in', () => {
   const props = (patch: Partial<Props> = {}): Props => ({ date: TODAY, tc: notClockedIn, now: T0, day: missed(), settings, ...patch });
   const takenDown = () => vi.mocked(dismissByTag).mock.calls.filter(([tag]) => tag === 'clock-in').length;
 
+  afterEach(() => setVisibility('visible'));
+
   it('raises one quiet banner whose button clocks in at the minute it names', () => {
     const clockInAt = vi.fn();
     renderAlarms({ tc: notClockedIn, day: missed({ clockInAt }) });
@@ -210,6 +212,23 @@ describe('missed clock-in', () => {
     a.rerender(props());
     b.rerender(props());
     expect(tags()).toEqual(['clock-in']);
+  });
+
+  it('waits for a tab that is shown, records nothing while hidden, and still comes down there', () => {
+    setVisibility('hidden');
+    const { rerender } = renderAlarms(props());
+    expect(alert).not.toHaveBeenCalled();
+    expect(localStorage.getItem('focus:alarms')).toBeNull();
+
+    setVisibility('visible');
+    rerender(props({ now: T0 + 1000 }));
+    expect(tags()).toEqual(['clock-in']);
+    expect(localStorage.getItem('focus:alarms')).toBe(`${TODAY} clockIn:missing`);
+
+    setVisibility('hidden');
+    vi.mocked(dismissByTag).mockClear();
+    rerender(props({ day: missed({ missedClockIn: null }) }));
+    expect(takenDown()).toBe(1);
   });
 
   it('waits while the day is not judged', () => {
