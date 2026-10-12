@@ -60,7 +60,7 @@ describe('repeating', () => {
     cleanup();
     onServer = makeBoard();
     await renderBoard();
-    expect(within(column('Later')).getByText(/Nothing parked/)).toBeTruthy();
+    expect(within(column('Later')).getByText(/Nothing parked/).textContent).toBe('Nothing parked. N or + adds a card.');
     expect(within(column('Later')).queryByRole('heading', { name: 'Repeats' })).toBeNull();
   });
 

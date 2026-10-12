@@ -124,7 +124,8 @@ what `npm run seed` writes.
   task's dialog, this week's routine ticks in Done, each with its day ("Done yesterday"), the
   fold's number gone while nothing is done today, and a task ticked on a later day with today's,
   its dialog naming that day (in a second tab, DevTools → Sensors → Location, Timezone ID
-  Pacific/Kiritimati: Move to Done on a Next card, then reload the first tab); with the earlier days' read failing (wrap `window.fetch` so `GET /api/days/range`
+  Pacific/Kiritimati: Move to Done on a Next card, then reload the first tab); with the earlier
+  days' read failing (wrap `window.fetch` so `GET /api/days/range`
   rejects, then press Board), Done ends with "Could not load these days" and Try Again, and no
   banner. The dialog: a click on a card's title, its meta line or its padding opens it, and so does
   Enter; the tick ticks and opens nothing. Enter in the title saves and closes, and the dialog stays

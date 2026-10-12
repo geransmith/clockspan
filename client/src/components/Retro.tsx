@@ -163,7 +163,6 @@ export function Retro({ date, priorities, sessions, note, reviewedAt, open, onCh
       <div className="retro-foot">
         {reviewed && (
           <span className="pill pill--ok">
-            {/* A past day reviewed the next morning would read as reviewed on the day. */}
             <Check /> Reviewed {todayKey(reviewedAt) === date ? '' : `${formatDateShort(todayKey(reviewedAt))}, `}
             {formatTime(reviewedAt)}
           </span>

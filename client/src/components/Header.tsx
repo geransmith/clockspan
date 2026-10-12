@@ -40,7 +40,6 @@ export function Header({ view, onNavigate, onOpenSettings }: Props) {
     historyButton.current?.focus();
     toggleHistory();
   });
-  // A title names its key while it is bound: "Board (B)".
   const titled = (name: string, key: string | undefined) => (key ? `${name} (${key})` : name);
 
   return (
