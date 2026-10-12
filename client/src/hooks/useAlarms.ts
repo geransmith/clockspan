@@ -21,6 +21,8 @@ export interface AlarmDayState extends TargetDay {
   missedClockIn: number | null;
   /** The "Not Clocked In" banner's Clock In. */
   clockInAt: (at: number) => void;
+  /** The "Lunch Is Over" banner's Lunch In Now, which fills an empty Lunch in with the minute of the press. */
+  lunchInNow: () => void;
   /** The break alarm's Start Break (`useBreak().start`). */
   startBreak: (minutes: number) => Promise<void>;
   /** A timer start is out (`useTimer().starting`), so Start Break does nothing. */
@@ -38,7 +40,8 @@ const CLOCK_IN_KEY = 'clockIn:missing';
  * stored under `USER_KEYS.alarms`) prevents repeats.
  */
 export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings: Settings, now: number, day: AlarmDayState): void {
-  const { overtimeApproved, retroDone, breaks, timerRunning, approveOvertime, openRetro, missedClockIn, clockInAt, startBreak, timerStarting } = day;
+  const { overtimeApproved, retroDone, breaks, timerRunning, approveOvertime, openRetro, missedClockIn, clockInAt, lunchInNow, startBreak, timerStarting } =
+    day;
   // Read at the press, not when the banner went up.
   const starting = useLatest(timerStarting);
   const fired = useRef<{ date: string; set: Set<string> } | null>(null);
@@ -122,9 +125,12 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
           ? { label: ALARM_ACTIONS.approveOvertime, run: approveOvertime }
           : e.id === 'retro'
             ? { label: ALARM_ACTIONS.openRetro, run: openRetro }
-            : e.id === 'noBreak'
-              ? { label: ALARM_ACTIONS.startBreak(minutes), run: takeBreak }
-              : undefined;
+            : // Reached only: a tap on a warning would record a short lunch, and on a repeat a late time.
+              e.id === 'lunchEnd' && e.kind === 'due'
+              ? { label: ALARM_ACTIONS.lunchInNow, run: lunchInNow }
+              : e.id === 'noBreak'
+                ? { label: ALARM_ACTIONS.startBreak(minutes), run: takeBreak }
+                : undefined;
       alert({
         kicker,
         title,
@@ -152,6 +158,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     openRetro,
     missedClockIn,
     clockInAt,
+    lunchInNow,
     startBreak,
     starting,
   ]);

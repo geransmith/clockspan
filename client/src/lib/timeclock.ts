@@ -61,7 +61,7 @@ export interface TimeclockResult {
 }
 
 const LUNCH_OUT_POSITION = 1;
-const LUNCH_IN_POSITION = 2;
+export const LUNCH_IN_POSITION = 2;
 /** The clock-out row is the last row and never earlier than this. */
 const CLOCK_OUT_MIN_POSITION = 3;
 

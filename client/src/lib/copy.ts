@@ -266,10 +266,11 @@ export const BREAK_SUGGESTION = {
   start: 'Start Break',
 } as const;
 
-/** The one button an alarm banner can carry: clock-out's, the retrospective's and the break alarm's. */
+/** The one button an alarm banner can carry: clock-out's, the retrospective's, "Lunch Is Over"'s and the break alarm's. */
 export const ALARM_ACTIONS = {
   approveOvertime: 'Overtime Approved',
   openRetro: 'Open Retrospective',
+  lunchInNow: 'Lunch In Now',
   startBreak: (minutes: number) => `Start Break · ${minutes} min`,
 } as const;
 
