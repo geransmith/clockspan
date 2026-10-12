@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../api';
-import { alert, dismissByTag, warnQuietly } from '../lib/alerts';
+import { alert, dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import {
@@ -11,6 +11,7 @@ import {
   deferredAnswer,
   echoPunches,
   makeDay,
+  makeSession,
   makeSettings,
   punchesAt,
   setVisibility,
@@ -191,5 +192,33 @@ describe('useTodayAlarms', () => {
     await settle(MINUTE_MS);
     expect(api.getDay).toHaveBeenCalledTimes(2);
     expect(alerted().find((a) => a.tag === 'alarm:clockOut')?.title).toBe('Time to Clock Out');
+  });
+
+  describe('missed clock-in', () => {
+    // A session started at 8:47:20 on a day with no punch.
+    const loggedDay = () => makeDay(TODAY, { sessions: [makeSession({ startedAt: T0 - 13 * MINUTE_MS + 20_000 })] });
+    const banner = () => alerted().find((a) => a.tag === 'clock-in');
+
+    it('offers it once the day is judged, and its button fills Clock in at the floored minute', async () => {
+      vi.mocked(api.putPunches).mockImplementation(echoPunches);
+      render(makeSettings(), loggedDay());
+      await judged();
+      expect(banner()?.title).toBe('Not Clocked In');
+      act(() => banner()!.action!.run());
+      expect(unlockAudio).toHaveBeenCalledOnce();
+      await settle();
+      expect(api.putPunches).toHaveBeenCalledWith(TODAY, punchesAt(T0 - 13 * MINUTE_MS), punchesAt());
+    });
+
+    it('sends nothing when a Clock in reached the page before the press', async () => {
+      const { result } = render(makeSettings(), loggedDay());
+      await judged();
+      // The phone clocked in meanwhile, and a refresh brought it before the press.
+      vi.mocked(api.getDay).mockResolvedValue(answered({ ...loggedDay(), punches: punchesAt(T0 - 20 * MINUTE_MS) }));
+      await act(() => result.current.store.refresh(TODAY));
+      act(() => banner()!.action!.run());
+      await settle();
+      expect(api.putPunches).not.toHaveBeenCalled();
+    });
   });
 });

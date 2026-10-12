@@ -45,6 +45,11 @@ export interface TimeclockResult {
    * (`orderSlip`). Null while they do.
    */
   outOfOrder: { position: number; after: number } | null;
+  /**
+   * A past day still clocked in at its end, with its punches in order: nothing says when the work
+   * stopped, so `workedSeconds` runs to the end of the day and no hours total counts it.
+   */
+  unclosed: boolean;
 }
 
 const LUNCH_OUT_POSITION = 1;
@@ -102,6 +107,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy: null,
     secondMealStatus: 'none',
     outOfOrder: null,
+    unclosed: false,
   };
   if (clockIn == null) return empty;
 
@@ -210,6 +216,7 @@ export function computeTimeclock(punches: Punch[], settings: TimeclockSettings, 
     secondMealBy,
     secondMealStatus,
     outOfOrder,
+    unclosed: opts.frozen === true && clockedIn && !outOfOrder,
   };
 }
 
@@ -252,7 +259,8 @@ export function targetFraction(tc: TimeclockResult): number {
 
 /**
  * A stored day's timeclock: on its own work-day length (daySettings), live today; a past day is
- * frozen at its end so an unclosed clock-in doesn't count forever.
+ * frozen at its end. One still clocked in there runs its worked time to the end of the day, and
+ * the totals leave it out through `unclosed`.
  */
 export function dayTimeclock(
   day: { date: string; punches: Punch[]; workMinutes: number | null },
