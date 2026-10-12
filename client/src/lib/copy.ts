@@ -266,8 +266,8 @@ export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =
   `Second meal period ${overdue ? 'was due' : 'due'} by ${at} (${worked} worked)`;
 
 /**
- * Above the sheet when set punch times don't alternate in, out, in, out: the row out of place and
- * the one it should come after, as the card names them, with their times (`afterAt` null: empty).
+ * Above the sheet when `orderSlip` finds a punch out of place: the row out of place and the one it
+ * should come after, as the card names them, with their times (`afterAt` null: empty).
  */
 export const PUNCH_ORDER = (row: string, at: string, after: string, afterAt: string | null) =>
   afterAt == null ? `${row} (${at}) has no ${after} before it.` : `${row} (${at}) is earlier than ${after} (${afterAt}).`;
