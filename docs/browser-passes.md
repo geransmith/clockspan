@@ -153,6 +153,8 @@ what `npm run seed` writes.
   its chip (the seed files that task under none) and open the Week that holds that day (◀ on a
   Monday): it is one task on every day the seed adds it mid-day, so the category reaches each of
   them, and any period holding one of those days names it.
+  The seed's past normal days have a half-hour "Team sync": Review → Week lists "Meetings" before
+  "Breaks", and such a day's retro card adds "Meetings 30m".
 - **The board**: after `npm run seed`, press Board. At 1440: the four columns; each +'s box (Later's
   card at the top, Next's at the end, In Progress's row on today's sheet and asking past three rows;
   Enter keeps the box, an empty Enter or Escape closes it, one with text stays open when left); a

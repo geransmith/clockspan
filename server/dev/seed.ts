@@ -500,8 +500,11 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
   const twoDone = rand() > 0.4;
   const priorities = [priority(1, texts[0]!, true), priority(2, texts[1]!, twoDone), priority(3, texts[2]!, false)];
   const routine = routines(priorities.length);
+  // A half-hour call after the afternoon's sessions, so Review has meeting time to show.
+  const sync = lunchIn + 135 * MINUTE_MS;
   return {
     ...base,
+    meetings: { [`seedsync${date.replaceAll('-', '')}`]: { title: 'Team sync', startsAt: sync, endsAt: sync + 30 * MINUTE_MS } },
     punches: punchRows([clockIn, lunchOut, lunchIn, clockOut]),
     priorities: [...priorities, ...routine],
     sessions: [

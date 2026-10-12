@@ -848,7 +848,11 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   where it adds something (Off the Plan's total over two rows or more, Not Done's count above none).
   Review passes `known` and `laned` (the uids of the tasks the board holds in Later or Next) from
   `useBoardState()` once the board has loaded, and empty ones before, so until then nothing is
-  grouped by category and no task counts as laned in Not Done.
+  grouped by category and no task counts as laned in Not Done. Meeting time (`meetingTime`,
+  `lib/meetings.ts`) is a day's meetings, one-off and weekly, skipped ones aside, up to its Clock out
+  once reached and today's up to now (`dayEnd`, `lib/timeclock.ts`), an overlap counted once:
+  `reviewRange`'s `meetings` and the retro card's Meetings beside On plan and Off plan, each shown
+  only when there is some. It changes neither Focused, the hours nor % on plan.
 - **A session is named and filed by its task.** `sessionName(s, rows)` and
   `sessionCategory(s, rows)` (`lib/retro.ts`) read the written row its task is on its day
   (`sessionRow`), so a rename or a chip changed on the sheet shows at once, else the server's
