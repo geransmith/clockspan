@@ -86,6 +86,7 @@ export const TEST_SETTINGS: Settings = {
   recurringPerDay: 3,
   alarms: {
     lunchBy: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
+    lunchEnd: { enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 },
     clockOut: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     secondMeal: { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 },
     retro: { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 },

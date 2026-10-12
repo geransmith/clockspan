@@ -27,9 +27,9 @@ export function ClockBar({ day, today, now }: { day: Day; today: string; now: nu
   return (
     <section className="clock-bar" aria-label={CARD_TITLES.timeclock}>
       <dl>
-        {items.map(({ id, value, sub, tone }) => (
+        {items.map(({ id, label, value, sub, tone }) => (
           <div key={id} className={tone || undefined}>
-            <dt>{LABELS[id]}</dt>
+            <dt>{label ?? LABELS[id]}</dt>
             <dd className="clock-bar-value">{value}</dd>
             {sub && <dd className="tile-sub">{sub}</dd>}
           </div>

@@ -47,7 +47,7 @@ export function normalizeLayout(raw: readonly unknown[]): Settings['layout'] {
   return out;
 }
 
-export const ALARM_IDS = ['lunchBy', 'clockOut', 'secondMeal', 'retro'] as const;
+export const ALARM_IDS = ['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal', 'retro'] as const;
 export type AlarmId = (typeof ALARM_IDS)[number];
 
 /** How times are written: the browser locale's way, or 12-hour / 24-hour regardless. */
@@ -103,7 +103,7 @@ export interface Settings {
    * the day's length shown as overtime. Off (exempt, salaried) it reads as time past the day.
    */
   overtimeApproval: boolean;
-  /** The lunch deadline and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
+  /** The lunch deadline, end of lunch and second meal period rules, with their alarms. Off where they don't apply (exempt work, another state). */
   mealRules: boolean;
   /**
    * The timeclock's Lunch out and Lunch in rows, and the Lunch taken sticker, while `mealRules`
@@ -121,7 +121,7 @@ export interface Settings {
   stickers: boolean;
   /** Saturday and Sunday columns on the History calendar. Off drops them and their stickers from the counts. */
   showWeekends: boolean;
-  /** Today's clock in, lunch deadline and clock out time in a row above the board's columns. */
+  /** Today's clock in, lunch deadline (the end of lunch while at lunch) and clock out time in a row above the board's columns. */
   clockBar: boolean;
   /** Recurring rows the morning offer ticks; more can be ticked. */
   recurringPerDay: number;
@@ -166,6 +166,8 @@ export const ALARM_LIMITS = {
 const DEFAULT_ALARM: AlarmSettings = { enabled: true, leadMinutes: [15, 5, 1], onDue: true, overdueEveryMinutes: 5 };
 // The retrospective is one nudge before the day ends, not a deadline: no repeat by default.
 const DEFAULT_RETRO_ALARM: AlarmSettings = { enabled: true, leadMinutes: [30], onDue: false, overdueEveryMinutes: 0 };
+// The end of lunch is a quiet catch for a Lunch in never punched: no warnings, a slower repeat.
+const DEFAULT_LUNCH_END_ALARM: AlarmSettings = { enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 };
 
 /** Frozen all the way down: both sides hand this object out as-is when there is nothing to merge. */
 function deepFreeze<T>(value: T): T {
@@ -212,7 +214,13 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   showWeekends: true,
   clockBar: true,
   recurringPerDay: 3,
-  alarms: { lunchBy: { ...DEFAULT_ALARM }, clockOut: { ...DEFAULT_ALARM }, secondMeal: { ...DEFAULT_ALARM }, retro: { ...DEFAULT_RETRO_ALARM } },
+  alarms: {
+    lunchBy: { ...DEFAULT_ALARM },
+    lunchEnd: { ...DEFAULT_LUNCH_END_ALARM },
+    clockOut: { ...DEFAULT_ALARM },
+    secondMeal: { ...DEFAULT_ALARM },
+    retro: { ...DEFAULT_RETRO_ALARM },
+  },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },
 });

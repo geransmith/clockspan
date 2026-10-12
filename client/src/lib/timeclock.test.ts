@@ -297,6 +297,42 @@ describe('times typed ahead of now', () => {
   });
 });
 
+describe('the end of lunch', () => {
+  const lunch = punches([T0, T0 + 4 * HOUR_MS, null, null]);
+  const ends = (p: Punch[], now: number, s: TimeclockSettings = settings) => computeTimeclock(p, s, now).lunchEndsAt;
+
+  it('is Lunch out plus the lunch length while at lunch, and holds once that is past', () => {
+    expect(ends(lunch, T0 + 4 * HOUR_MS + 10 * MINUTE_MS)).toBe(T0 + 4.5 * HOUR_MS);
+    expect(ends(lunch, T0 + 5 * HOUR_MS)).toBe(T0 + 4.5 * HOUR_MS);
+  });
+
+  it('is null before clock-in, while working, after Lunch in, and with the punches out of order', () => {
+    expect(ends(punches([null, null, null, null]), T0)).toBeNull();
+    expect(ends(punches([T0, null, null, null]), T0 + 2 * HOUR_MS)).toBeNull();
+    expect(ends(punches([T0, T0 + 4 * HOUR_MS, T0 + 4.5 * HOUR_MS, null]), T0 + 5 * HOUR_MS)).toBeNull();
+    // Lunch in typed before Lunch out.
+    expect(ends(punches([T0, T0 + 4 * HOUR_MS, T0 + 3 * HOUR_MS, null]), T0 + 5 * HOUR_MS)).toBeNull();
+  });
+
+  it('is null with the meal periods off or no lunch length', () => {
+    const now = T0 + 4 * HOUR_MS + 10 * MINUTE_MS;
+    expect(ends(lunch, now, { ...settings, mealRules: false })).toBeNull();
+    expect(ends(lunch, now, { ...settings, lunchMinutes: 0 })).toBeNull();
+  });
+
+  it('waits for a Lunch in typed ahead to be reached', () => {
+    const p = punches([T0, T0 + 4 * HOUR_MS, T0 + 4.75 * HOUR_MS, null]);
+    expect(ends(p, T0 + 4.5 * HOUR_MS)).toBe(T0 + 4.5 * HOUR_MS);
+    expect(ends(p, T0 + 4.75 * HOUR_MS)).toBeNull();
+  });
+
+  it('holds with a Clock out typed ahead until the clock reaches it, where the punches read out of order', () => {
+    const p = punches([T0, T0 + 4 * HOUR_MS, null, T0 + 5 * HOUR_MS]);
+    expect(ends(p, T0 + 4.75 * HOUR_MS)).toBe(T0 + 4.5 * HOUR_MS);
+    expect(ends(p, T0 + 5 * HOUR_MS)).toBeNull();
+  });
+});
+
 describe('punches out of order', () => {
   // The punch out of place, and the one it should come after.
   const slip = (times: (number | null)[], now = T0 + 10 * HOUR_MS) => computeTimeclock(punches(times), settings, now).outOfOrder;

@@ -58,6 +58,12 @@ describe('mergeSettings', () => {
     expect(mergeSettings(DEFAULT_SETTINGS, { retention: 'forever' }).retention).toEqual(DEFAULT_SETTINGS.retention);
   });
 
+  it('gives a row saved before the lunch end alarm existed that alarm on, with no warnings, repeating every 15 min', () => {
+    const old = { enabled: false, leadMinutes: [10], onDue: false, overdueEveryMinutes: 2 };
+    const merged = mergeSettings(DEFAULT_SETTINGS, { alarms: { lunchBy: old, clockOut: old, secondMeal: old, retro: old } }).alarms;
+    expect(merged.lunchEnd).toEqual({ enabled: true, leadMinutes: [], onDue: true, overdueEveryMinutes: 15 });
+  });
+
   it('takes every switch only as true or false, flipped from its default', () => {
     const switches = (Object.keys(DEFAULT_SETTINGS) as (keyof typeof DEFAULT_SETTINGS)[]).filter((k) => typeof DEFAULT_SETTINGS[k] === 'boolean');
     // Every top-level boolean default is a switch, so a new one is covered here with no edit; this only proves the filter finds them.

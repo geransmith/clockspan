@@ -94,6 +94,24 @@ describe('firing', () => {
   });
 });
 
+describe('lunch end', () => {
+  it('rings when lunch is over and replaces that banner with each repeat, so they never stack', () => {
+    // Clocked in at 5:00, Lunch out at 8:30: the 30 min lunch ends now.
+    const lunchAt = (now: number) => tcAt(now, T0 - 240 * MINUTE_MS, T0 - 30 * MINUTE_MS);
+    const { rerender } = renderAlarms({ tc: lunchAt(T0) });
+    expect(tags()).toEqual(['alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Is Over', tone: 'warn', chime: settings.sounds.due, action: undefined }),
+    );
+    const later = T0 + 15 * MINUTE_MS;
+    rerender({ date: TODAY, tc: lunchAt(later), now: later, day: NO_DAY, settings });
+    expect(tags()).toEqual(['alarm:lunchEnd', 'alarm:lunchEnd']);
+    expect(vi.mocked(alert).mock.calls[1]![0]).toEqual(
+      expect.objectContaining({ title: 'Lunch Ended 15 min Ago', tone: 'warn', chime: settings.sounds.overdue }),
+    );
+  });
+});
+
 describe('clock-out and retro', () => {
   it('offers the banner buttons it was given', () => {
     const approveOvertime = vi.fn();
@@ -144,14 +162,28 @@ describe('clock-out and retro', () => {
     rerender({ date: TODAY, tc: null, now: T0, day: NO_DAY, settings });
     expect(dismissByTag).not.toHaveBeenCalled();
     rerender({ date: TODAY, tc: tcAt(T0), now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
+      'alarm:clockOut',
+      'alarm:lunchBy',
+      'alarm:lunchEnd',
+      'alarm:retro',
+      'alarm:secondMeal',
+      'clock-in',
+    ]);
 
     // Past midnight, yesterday's banners (and their buttons) go with the day, before the new
     // day's punches have been judged.
     const next = renderAlarms({ tc: overDay });
     vi.mocked(dismissByTag).mockClear();
     next.rerender({ date: '2026-09-29', tc: null, now: T0, day: NO_DAY, settings });
-    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual(['alarm:clockOut', 'alarm:lunchBy', 'alarm:retro', 'alarm:secondMeal', 'clock-in']);
+    expect(vi.mocked(dismissByTag).mock.calls.flat().sort()).toEqual([
+      'alarm:clockOut',
+      'alarm:lunchBy',
+      'alarm:lunchEnd',
+      'alarm:retro',
+      'alarm:secondMeal',
+      'clock-in',
+    ]);
   });
 
   it('a reviewed day disarms the retro alarm, and a moved target clears its banner', () => {

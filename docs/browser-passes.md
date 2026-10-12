@@ -38,9 +38,13 @@ what `npm run seed` writes.
   clock-out at +10. The work day must be longer than the lunch window, or lunch reads "Not
   needed today" and never rings, and longer than the second-meal threshold, or that alarm
   waits for the day to run over or for overtime approval. At the mobile preset each target's
-  banner shows at once, the clock-out banner with its "Overtime Approved" button. When done,
-  `npm run seed -- --fresh` or `curl -X DELETE localhost:3000/api/settings` puts the default
-  settings back.
+  banner shows at once, the clock-out banner with its "Overtime Approved" button. Lunch length 0
+  keeps the lunch end alarm off; for it, run
+  `curl -X PUT localhost:3000/api/settings -H 'content-type: application/json' -d '{"lunchMinutes":2,"alarms":{"lunchEnd":{"overdueEveryMinutes":1}}}'`
+  and press Now on Lunch out: "Lunch Is Over" shows at +2 min, a repeat replaces it at +3, and Now
+  on Lunch in takes it down. After a reload, clear Lunch out (×) and press its Now again at a new
+  minute to see it again. When done, `npm run seed -- --fresh` or
+  `curl -X DELETE localhost:3000/api/settings` puts the default settings back.
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
 - **The update banner**: in the page, wrap `window.fetch` so each answer that has a
   `Clockspan-Version` header names another version (a new `Response` over the same body, with

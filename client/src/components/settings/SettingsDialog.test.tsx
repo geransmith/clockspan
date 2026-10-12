@@ -236,6 +236,26 @@ describe('SettingsDialog', () => {
     expect(hint('Retrospective')).not.toContain('Overtime approval');
   });
 
+  it('offers Lunch end under Lunch deadline, with no warnings, only with the meal periods on', async () => {
+    await renderDialog();
+    await openTab('Alarms');
+    const editors = () => [...document.querySelectorAll('.alarm-editor')].map((e) => e.getAttribute('aria-label'));
+    expect(editors()).toEqual(['Lunch deadline', 'Lunch end', 'Clock-out', 'Second meal period', 'Retrospective']);
+    const lunchEnd = screen.getByRole('group', { name: 'Lunch end', hidden: true });
+    expect(within(lunchEnd).getByRole('switch', { name: 'Lunch end', hidden: true })).toBeTruthy();
+    expect(within(lunchEnd).getByText('When reached')).toBeTruthy();
+    expect(within(lunchEnd).queryByRole('group', { name: 'Warn before', hidden: true })).toBeNull();
+    expect(
+      screen.getByText('Alerts as lunch, clock-out and the second meal period approach, when lunch is over, and a nudge to look back before the day ends.'),
+    ).toBeTruthy();
+    await openTab('Timeclock');
+    fireEvent.click(toggle('Meal periods'));
+    await settle();
+    await openTab('Alarms');
+    expect(editors()).toEqual(['Clock-out', 'Retrospective']);
+    expect(screen.getByText('Alerts as clock-out approaches, and a nudge to look back before the day ends.')).toBeTruthy();
+  });
+
   it('saves one alarm field or one sound without touching the others', async () => {
     await renderDialog();
     await openTab('Alarms');
