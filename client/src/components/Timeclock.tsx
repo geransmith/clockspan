@@ -299,6 +299,21 @@ export function Timeclock({
         </p>
       )}
 
+      <div className="punches" ref={punchBox}>
+        {fixedRow(0)}
+        {pairBlock(before)}
+        {lunchRows && fixedRow(1)}
+        {lunchRows && fixedRow(2)}
+        {pairBlock(after)}
+        {clockOutPos != null && fixedRow(clockOutPos)}
+        {punches.length + 2 <= MAX_PUNCHES && (
+          <button className="btn btn-ghost punch-add" onClick={addPair}>
+            <Plus />
+            Add Extra Out / In
+          </button>
+        )}
+      </div>
+
       <WorkDay usual={settings.workMinutes} own={workMinutes} onChange={onWorkMinutesChange} />
 
       {otFeature && (
@@ -314,21 +329,6 @@ export function Timeclock({
           onChange={onOvertimeChange}
         />
       )}
-
-      <div className="punches" ref={punchBox}>
-        {fixedRow(0)}
-        {pairBlock(before)}
-        {lunchRows && fixedRow(1)}
-        {lunchRows && fixedRow(2)}
-        {pairBlock(after)}
-        {clockOutPos != null && fixedRow(clockOutPos)}
-        {punches.length + 2 <= MAX_PUNCHES && (
-          <button className="btn btn-ghost punch-add" onClick={addPair}>
-            <Plus />
-            Add Extra Out / In
-          </button>
-        )}
-      </div>
     </div>
   );
 }
