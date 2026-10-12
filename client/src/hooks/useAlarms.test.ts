@@ -105,6 +105,26 @@ describe('clock-out and retro', () => {
     expect(retro!.action).toEqual({ label: 'Open Retrospective', run: openRetro });
   });
 
+  it('leaves Overtime Approved off a warning for a Clock out typed ahead, and keeps it on the planned end', () => {
+    const approveOvertime = vi.fn();
+    // Lunch taken, the planned end 2 h 30 m away, and the Clock out typed for 10 min from now.
+    const typed = tcAt(T0, T0 - 360 * MINUTE_MS, T0 - 200 * MINUTE_MS, T0 - 170 * MINUTE_MS, T0 + 10 * MINUTE_MS);
+    renderAlarms({ tc: typed, day: { ...NO_DAY, approveOvertime } });
+    const clockOut = vi.mocked(alert).mock.calls.find(([a]) => a.tag === 'alarm:clockOut')![0];
+    expect(clockOut.title).toBe('Clock Out in 10 min');
+    expect(clockOut.body).toBe(`You set your Clock out for ${formatTime(T0 + 10 * MINUTE_MS, resolveHour12(settings.timeFormat))}. Start wrapping up.`);
+    expect(clockOut.action).toBeUndefined();
+
+    // A Clock out typed later than a planned end 15 min away: the warning is for the planned end.
+    vi.mocked(alert).mockClear();
+    localStorage.clear();
+    const later = tcAt(T0, T0 - 495 * MINUTE_MS, T0 - 300 * MINUTE_MS, T0 - 270 * MINUTE_MS, T0 + 60 * MINUTE_MS);
+    renderAlarms({ tc: later, day: { ...NO_DAY, approveOvertime } });
+    const planned = vi.mocked(alert).mock.calls.find(([a]) => a.tag === 'alarm:clockOut')![0];
+    expect(planned.title).toBe('Clock Out in 15 min');
+    expect(planned.action).toEqual({ label: 'Overtime Approved', run: approveOvertime });
+  });
+
   it('approving overtime while the clock-out banner is up clears that banner and no other', () => {
     const { rerender } = renderAlarms({ tc: overDay });
     expect(tags()).toEqual(['alarm:clockOut', 'alarm:retro']);

@@ -185,6 +185,34 @@ describe('alarmTargets', () => {
     });
   });
 
+  it('moves clock-out and the retrospective to a Clock out typed earlier than the planned end, never later', () => {
+    const back = [IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS] as const;
+    const early = alarmTargets(tc(IN + 5 * HOUR_MS, ...back, IN + 7 * HOUR_MS), s, day);
+    expect(early.filter((t) => t.id === 'clockOut' || t.id === 'retro')).toEqual([
+      { id: 'clockOut', at: IN + 7 * HOUR_MS, armed: true },
+      { id: 'retro', at: IN + 7 * HOUR_MS, armed: true },
+    ]);
+    const late = tc(IN + 5 * HOUR_MS, ...back, IN + 9 * HOUR_MS);
+    expect(alarmTargets(late, s, day).map((t) => t.at)).toEqual([IN + 5 * HOUR_MS, IN + 8.5 * HOUR_MS, late.secondMealBy, IN + 8.5 * HOUR_MS]);
+  });
+
+  it('rings only the warnings before a Clock out typed earlier than the planned end', () => {
+    const fired = new Set<string>();
+    const rang: AlarmEvent[] = [];
+    // Lunch 12:00 to 12:30 and a Clock out typed for 15:00, through to past the 16:30 planned end.
+    for (let now = IN + 5 * HOUR_MS; now <= IN + 9 * HOUR_MS; now += MINUTE_MS) {
+      const r = dueEvents(alarmTargets(tc(now, IN, IN + 4 * HOUR_MS, IN + 4.5 * HOUR_MS, IN + 7 * HOUR_MS), s, day), s.alarms, fired, now);
+      r.crossed.forEach((k) => fired.add(k));
+      rang.push(...r.fire);
+    }
+    expect(rang.map((e) => [e.id, e.kind, e.minutes, e.at])).toEqual([
+      ['retro', 'lead', 30, IN + 6.5 * HOUR_MS],
+      ['clockOut', 'lead', 15, IN + 7 * HOUR_MS - 15 * MINUTE_MS],
+      ['clockOut', 'lead', 5, IN + 7 * HOUR_MS - 5 * MINUTE_MS],
+      ['clockOut', 'lead', 1, IN + 7 * HOUR_MS - MINUTE_MS],
+    ]);
+  });
+
   it('keeps lunch armed with the punches out of order, since its deadline comes from the clock-in', () => {
     // Mid-morning, no lunch yet, and a Clock out typed as 2:00 AM: the typo must not mute the meal period.
     const typo = tc(IN + 3 * HOUR_MS, IN, null, null, IN - 6 * HOUR_MS);
@@ -256,7 +284,7 @@ describe('describeEvent', () => {
   // 8:32 clock-in, 8h day, lunch within 4h.
   const clockIn = new Date(2026, 8, 16, 8, 32).getTime();
   // Seen on time: half an hour ahead of the target, before any of these warnings is due.
-  const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600, now: T - 30 * MINUTE_MS };
+  const ctx = { clockIn, hour12: true, workMinutes: 480, lunchDeadlineMinutes: 240, secondMealAfterMinutes: 600, now: T - 30 * MINUTE_MS, typedClockOut: null };
   const ev = (id: AlarmId, kind: AlarmEvent['kind'], minutes: number, target: number): AlarmEvent => ({
     key: eventKey(id, kind, minutes, target),
     id,
@@ -289,6 +317,18 @@ describe('describeEvent', () => {
     const over = describeEvent(ev('clockOut', 'overdue', 10, T), ctx);
     expect(over.title).toBe('Clock-Out Is 10 min Overdue');
     expect(over.body).toContain('past your 8h 00m target');
+  });
+
+  it('names a Clock out typed ahead in the warning only while it is the target', () => {
+    const typed = describeEvent(ev('clockOut', 'lead', 15, T), { ...ctx, typedClockOut: T });
+    expect(typed).toEqual({
+      kicker: 'Clock-out alarm',
+      title: 'Clock Out in 15 min',
+      body: `You set your Clock out for ${formatTime(T, true)}. Start wrapping up.`,
+      tone: 'warn',
+    });
+    // A later typed time leaves the target on the planned end.
+    expect(describeEvent(ev('clockOut', 'lead', 15, T), { ...ctx, typedClockOut: T + HOUR_MS }).body).toContain('8h 00m day');
   });
 
   it('frames the retrospective as a nudge before clock-out, never a deadline', () => {

@@ -455,9 +455,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   chronologically; `extraPairs()` only decides where the card *shows* a pair. Today a time typed
   ahead of now counts once the clock reaches it (its order is checked at once, except that an Out
   typed ahead right after a Lunch out or an extra pair's Out whose own In is still empty waits for
-  the clock to reach it); a past day counts every time it has. Today ends only at the Clock out,
-  when it is the latest punch reached, with the
-  target met or not; an extra pair's Out is a break, the second meal included, and never ends it. A
+  the clock to reach it); a past day counts every time it has. A Clock out typed ahead is what
+  Clock Out At shows (`typedClockOut`) until it is reached. Today ends only at the Clock out, when
+  it is the latest punch reached, with the target met or not; an extra pair's Out is a break, the
+  second meal included, and never ends it. A
   past day ends once it is off the clock. "Add Extra Out / In" appends two rows, so the old Clock
   out becomes the new pair's Out. Removing the pair an Add just made, before any punch changes,
   undoes the Add and gives the Clock out its time back (`Timeclock` keeps the rows from before it in
@@ -815,8 +816,9 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   and its panel uses `dayTimeclock`, the sheet's math. The switch names the view, so the Days
   and Review cards have no title of their own: each is a section named by `aria-label`, and
   Review's section headings are its h2s.
-- **The `retro` alarm target is the clock-out instant** ("warn before" = minutes before the
-  end of the day) and is **not** silenced by overtime approval; marking the day reviewed
+- **The `retro` alarm target is the clock-out instant**, the clock-out alarm's: the planned end,
+  or a Clock out typed ahead when that is earlier (`alarmTargets`). "Warn before" is minutes
+  before it, and it is **not** silenced by overtime approval; marking the day reviewed
   (`days.retro_at`), or hiding the retrospective card under Customize (`alarmTargets` reads
   `settings.layout`), disarms it. Its banner button jumps to the card and opens it (`jumpTo` in
   `App.tsx`). Today's card is folded to an Open button, which puts the focus in the note box, until

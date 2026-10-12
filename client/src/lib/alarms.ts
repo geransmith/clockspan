@@ -33,19 +33,21 @@ export interface TargetDay {
  * deadline comes from the clock-in and doesn't move, and a typo elsewhere must not mute the
  * meal period while the person is still working. On a day that is really over, the repeat is
  * what prompts fixing the punches. A hidden retrospective card disarms its reminder, since the
- * banner's button and Mark Reviewed are on the card.
+ * banner's button and Mark Reviewed are on the card. A typed Clock out moves the end earlier, never
+ * later, so a day running past the planned end still warns.
  */
 export function alarmTargets(tc: TimeclockResult, settings: TimeclockSettings & Pick<Settings, 'layout'>, day: TargetDay): AlarmTarget[] {
   const endFixed = !tc.outOfOrder && tc.state === 'working';
+  const end = Math.min(tc.clockOutAt ?? 0, tc.typedClockOut ?? Infinity);
   return [
     {
       id: 'lunchBy',
       at: tc.lunchBy ?? 0,
       armed: (tc.lunchStatus === 'upcoming' || tc.lunchStatus === 'overdue') && tc.state !== 'done',
     },
-    { id: 'clockOut', at: tc.clockOutAt ?? 0, armed: endFixed && !day.overtimeApproved },
+    { id: 'clockOut', at: end, armed: endFixed && !day.overtimeApproved },
     { id: 'secondMeal', at: tc.secondMealBy ?? 0, armed: secondMealApplies(tc, settings, day.overtimeApproved) },
-    { id: 'retro', at: tc.clockOutAt ?? 0, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
+    { id: 'retro', at: end, armed: endFixed && !day.retroDone && cardShown(settings.layout, 'retro') },
   ];
 }
 
@@ -140,12 +142,14 @@ export function dueEvents(
 /**
  * What the copy needs beyond the event itself: how the deadline was derived, the clock-in
  * ("clocked in at 8:32 AM"), whether times carry AM/PM (see `resolveHour12`), and when the event
- * is shown, since a warning seen late (the phone was asleep) says the time actually left.
+ * is shown, since a warning seen late (the phone was asleep) says the time actually left, and the
+ * Clock out typed ahead, which the clock-out warning names when it is the target.
  */
 type EventContext = Pick<TimeclockSettings, 'workMinutes' | 'lunchDeadlineMinutes' | 'secondMealAfterMinutes'> & {
   clockIn: number;
   hour12: boolean;
   now: number;
+  typedClockOut: number | null;
 };
 
 interface EventCopy {
@@ -254,10 +258,12 @@ export function describeEvent(e: AlarmEvent, ctx: EventContext): EventCopy {
       };
     case 'clockOut':
       if (kind === 'lead') {
+        // A day length and a clock-in don't add up to a time the user typed.
+        const end = e.target === ctx.typedClockOut ? `You set your Clock out for ${target}.` : `Your ${day} day ends at ${target} (clocked in ${clockIn}).`;
         return {
           kicker,
           title: `Clock Out in ${left}`,
-          body: `Your ${day} day ends at ${target} (clocked in ${clockIn}). Start wrapping up.`,
+          body: `${end} Start wrapping up.`,
           tone: 'warn',
         };
       }

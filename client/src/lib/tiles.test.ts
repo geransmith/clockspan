@@ -157,6 +157,17 @@ describe('Clock out at', () => {
     expect(tiles(out, at(17, 40)).clockOut).toEqual({ value: '16:30', sub: 'Over by 30m', tone: 'tile--danger' });
   });
 
+  it('shows a Clock out typed ahead, earlier or later than the planned end, measured to that time', () => {
+    const early = punchesAt(at(8), at(12), at(12, 30), at(15));
+    expect(tiles(early, at(13)).clockOut).toEqual({ value: '15:00', sub: 'In 2h 00m', tone: '' });
+    expect(tiles(early, at(14, 50)).clockOut).toEqual({ value: '15:00', sub: 'In 10m', tone: 'tile--warn' });
+    const late = punchesAt(at(8), at(12), at(12, 30), at(17));
+    expect(tiles(late, at(13)).clockOut).toEqual({ value: '17:00', sub: 'In 4h 00m', tone: '' });
+    expect(tiles(late, at(16, 45)).clockOut).toEqual({ value: '17:00', sub: 'Over by 15m', tone: 'tile--danger' });
+    // At lunch with Lunch in empty: the time typed, after the lunch still to come.
+    expect(tiles(punchesAt(at(8), at(12), null, at(17)), at(12, 10)).clockOut).toEqual({ value: '17:00', sub: 'After lunch', tone: '' });
+  });
+
   it('marks the day complete once clocked out', () => {
     const extra = punchesAt(at(8), at(12), at(12, 30), at(14), at(14, 15), at(16, 45));
     expect(tiles(extra, at(17)).clockOut).toEqual({ value: '16:45', sub: 'Day complete', tone: 'tile--accent' });
@@ -240,6 +251,7 @@ describe('clockBarItems', () => {
       [punchesAt(at(8), at(12)), at(12, 10)],
       [afterLunch, at(17)],
       [punchesAt(at(8), at(12), at(12, 30), at(16, 45)), at(17)],
+      [punchesAt(at(8), at(12), at(12, 30), at(15)), at(13)],
       [punchesAt(at(9), at(12), at(11), at(17)), at(17, 30)],
     ];
     for (const [rows, now] of cases) expect(bar(rows, now).at(-1)).toEqual({ id: 'clockOut', ...tiles(rows, now).clockOut });
