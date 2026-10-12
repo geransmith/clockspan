@@ -173,8 +173,7 @@ function DayCell({
   if (full) cls.push('is-full');
   // With hours not tracked a cell shows only that the day has something on it.
   const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
-  // Why a clocked-in day has no hours to show, if it has none.
-  const noHours = clocked?.outOfOrder ? CHECK_PUNCHES : clocked?.unclosed ? NO_CLOCK_OUT : null;
+  const dashWhy = clocked?.outOfOrder ? CHECK_PUNCHES : clocked?.unclosed ? NO_CLOCK_OUT : null;
   let label: string;
   let face: ReactNode = null;
   if (shown) {
@@ -188,11 +187,11 @@ function DayCell({
         ))}
       </span>
     );
-  } else if (noHours) {
+  } else if (dashWhy) {
     // The cell is too narrow for the words: a dash, as the sheet's Worked tile shows, and the words to hover or hear.
-    label = noHours.toLowerCase();
+    label = dashWhy.toLowerCase();
     face = (
-      <span className="calendar-worked" title={noHours}>
+      <span className="calendar-worked" title={dashWhy}>
         —
       </span>
     );
