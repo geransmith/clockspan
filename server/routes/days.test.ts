@@ -210,6 +210,10 @@ describe('PUT /api/days/:date/meetings', () => {
     expect((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].meetings).toEqual(both);
   });
 
+  it("keeps a weekly meeting's own times on the day with no title of their own", async () => {
+    expect((await put({ uid: 'aaaa1111', meeting: { ...standup, title: null } })).body).toEqual({ meetings: { aaaa1111: { ...standup, title: null } } });
+  });
+
   it('cuts a long title', async () => {
     const title = 'x'.repeat(LIMITS.meetingTitle + 5);
     expect((await put({ uid: 'aaaa1111', meeting: { ...standup, title } })).body.meetings.aaaa1111.title).toBe('x'.repeat(LIMITS.meetingTitle));
@@ -226,7 +230,7 @@ describe('PUT /api/days/:date/meetings', () => {
     }
     for (const title of [undefined, 5]) {
       const r = await put({ uid: 'aaaa1111', meeting: { ...standup, title } });
-      expect([r.status, r.body]).toEqual([400, { error: 'title must be text.' }]);
+      expect([r.status, r.body]).toEqual([400, { error: 'title must be text or null.' }]);
     }
     const { to } = punchWindow('2026-09-01');
     for (const times of [{ startsAt: 'soon' }, { endsAt: to + 1 }, { endsAt: standup.startsAt }, { endsAt: standup.startsAt - 1 }]) {
@@ -243,6 +247,25 @@ describe('PUT /api/days/:date/meetings', () => {
     const r = await put({ uid: 'aaaa1111', meeting: standup });
     expect([r.status, r.body]).toEqual([400, { error: `A day holds at most ${MEETINGS_PER_DAY} meetings.` }]);
     expect((await put({ uid: 'm0000000', meeting: standup })).body.meetings.m0000000).toEqual(standup);
+  });
+});
+
+describe('DELETE /api/days/:date/meetings/:uid', () => {
+  const standup = { title: 'Standup', startsAt: T0 + 16 * HOUR_MS, endsAt: T0 + 17 * HOUR_MS };
+
+  it("clears one meeting's entry and keeps the others, and counts one already gone as done", async () => {
+    await app.api.put('/api/days/2026-09-01/meetings', { uid: 'aaaa1111', meeting: standup });
+    await app.api.put('/api/days/2026-09-01/meetings', { uid: 'bbbb2222', meeting: null });
+    expect((await app.api.del('/api/days/2026-09-01/meetings/AAAA1111')).body).toEqual({ meetings: { bbbb2222: null } });
+    expect((await app.api.del('/api/days/2026-09-01/meetings/aaaa1111')).body).toEqual({ meetings: { bbbb2222: null } });
+    expect((await app.api.get('/api/days/2026-09-01')).body.meetings).toEqual({ bbbb2222: null });
+  });
+
+  it('stores no day for a date that has none, and refuses a bad uid', async () => {
+    expect((await app.api.del('/api/days/2026-08-03/meetings/aaaa1111')).body).toEqual({ meetings: {} });
+    expect(app.count('days', 'date = ?', '2026-08-03')).toBe(0);
+    const r = await app.api.del('/api/days/2026-09-01/meetings/not-a-uid!');
+    expect([r.status, r.body]).toEqual([400, { error: "uid must be a meeting's id." }]);
   });
 });
 
@@ -420,6 +443,8 @@ describe('days are scoped to the signed-in user', () => {
     expect((await b.put(`/api/days/${date}/offer`)).status).toBe(200);
     const meeting = { title: 'Mine', startsAt: until, endsAt: until + HOUR_MS };
     expect((await b.put(`/api/days/${date}/meetings`, { uid: 'aaaa1111', meeting })).status).toBe(200);
+    expect((await b.put(`/api/days/${date}/meetings`, { uid: 'bbbb2222', meeting })).status).toBe(200);
+    expect((await b.del(`/api/days/${date}/meetings/bbbb2222`)).status).toBe(200);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
     const bDay = (await b.get(`/api/days/${date}`)).body;
     expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
@@ -460,7 +485,7 @@ describe('days are scoped to the signed-in user', () => {
 });
 
 /** Every /:date write, the two checks below both take: each body would pass on a real date, so a write let through would store the day. */
-const writes = (day: string): [method: 'put' | 'post', path: string, body: unknown][] => [
+const writes = (day: string): [method: 'put' | 'post' | 'del', path: string, body: unknown][] => [
   ['put', `${day}/punches`, { punches: [] }],
   ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
   ['put', `${day}/overtime`, { approved: true }],
@@ -471,6 +496,7 @@ const writes = (day: string): [method: 'put' | 'post', path: string, body: unkno
     `${day}/meetings`,
     { uid: 'aaaa1111', meeting: { title: 'x', startsAt: Date.parse(day.slice(-10)) + 12 * HOUR_MS, endsAt: Date.parse(day.slice(-10)) + 13 * HOUR_MS } },
   ],
+  ['del', `${day}/meetings/aaaa1111`, undefined],
   ['put', `${day}/target`, { workMinutes: 240 }],
   ['put', `${day}/retro`, { note: 'x' }],
   ['put', `${day}/offer`, {}],

@@ -212,7 +212,15 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
       case 'timer':
         return <FocusTimer date={date} isToday={isToday} priorities={day.priorities} pick={pick} />;
       case 'meetings':
-        return <Meetings date={date} meetings={day.meetings} onSet={(uid, m) => void store.setMeeting(date, uid, m)} />;
+        return (
+          <Meetings
+            date={date}
+            today={today}
+            meetings={day.meetings}
+            onSet={(uid, m) => void store.setMeeting(date, uid, m)}
+            onClear={(uid) => void store.clearMeeting(date, uid)}
+          />
+        );
       case 'log':
         return (
           <SessionLog

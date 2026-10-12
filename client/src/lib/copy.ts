@@ -180,7 +180,7 @@ export const CONFIRM = {
   deleteBreak: 'Delete this break from the log?',
   deleteUser: (name: string) => `Delete ${name} and ALL of their data? This cannot be undone.`,
   signOut: 'Sign out of Clockspan on this device?',
-  resetSettings: 'Reset every setting to its default? Days, punches and sessions are kept.',
+  resetSettings: 'Reset every setting to its default? Days, punches and sessions are kept. Weekly meetings are cleared.',
   deleteDays: (n: number, before: string) => `Delete ${counted(n, 'day')} before ${before}? This cannot be undone.`,
   /** The board's Delete: how many days' lists hold the task, and the time logged on it (null with none). */
   deleteTask: (days: number, logged: string | null) =>
@@ -189,6 +189,7 @@ export const CONFIRM = {
       : 'Delete this task?',
   /** The first day pressed on a one-off task, on a card or today's row: there is no way back to a one-off. */
   makeRecurring: (title: string) => `Make ${title} repeat? Off today's list it shows under Repeats, not in Later or Next. This cannot be undone.`,
+  stopMeeting: (title: string) => `Stop repeating ${title}? The days before today keep it.`,
   deleteRecurring: (title: string) => `Stop repeating ${title}? It won't show under Repeats or be offered again. The days it was on keep it.`,
 } as const;
 
@@ -301,6 +302,9 @@ export const SECOND_MEAL_NOTE = (overdue: boolean, at: string, worked: string) =
 
 /** A meeting's end typed at or before its start, under its row on the Meetings card. */
 export const MEETING_ENDS_FIRST = 'The end is before the start.';
+
+/** A weekly meeting added once running ones fill the settings' cap (`WEEKLY_MEETINGS_MAX`). */
+export const WEEKLY_MEETINGS_FULL = 'No room for another weekly meeting.';
 
 /**
  * Above the sheet when `orderSlip` finds a punch out of place: the row out of place and the one it

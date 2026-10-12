@@ -272,18 +272,18 @@ type ChildRows = ReturnType<typeof rangeRows>;
 /** A day's snoozes as stored: JSON of alarm id to epoch ms, written only by `PUT /:date/snooze`. */
 const snoozes = (day: DayRow): Day['snoozedUntil'] => JSON.parse(day.snoozed_until) as Day['snoozedUntil'];
 
-/** A day's meetings as stored: JSON of uid to a meeting or null, written only by `PUT /:date/meetings`. */
+/** A day's meetings as stored: JSON of uid to a meeting or null, written only by `PUT` and `DELETE /:date/meetings`. */
 const meetingsOf = (day: DayRow): Day['meetings'] => JSON.parse(day.meetings) as Day['meetings'];
 
 /** A meeting the client sent for the day `window` belongs to, or null to take one off it. */
 function parseMeeting(raw: unknown, window: { from: number; to: number }): { meeting: Meeting | null } | { error: string } {
   if (raw === null) return { meeting: null };
   if (!isRow(raw)) return { error: 'meeting must be { title, startsAt, endsAt } or null.' };
-  if (typeof raw.title !== 'string') return { error: 'title must be text.' };
+  if (typeof raw.title !== 'string' && raw.title !== null) return { error: 'title must be text or null.' };
   const startsAt = parseInstant(raw.startsAt, window.from, window.to);
   const endsAt = parseInstant(raw.endsAt, window.from, window.to);
   if (startsAt == null || endsAt == null || endsAt <= startsAt) return { error: 'startsAt and endsAt must be times on that day, the end after the start.' };
-  return { meeting: { title: meetingTitle(raw.title), startsAt, endsAt } };
+  return { meeting: { title: raw.title === null ? null : meetingTitle(raw.title), startsAt, endsAt } };
 }
 
 /** The full JSON for one existing day, its child rows taken from its range's. */
@@ -512,6 +512,18 @@ export function daysRouter(db: DB, config: Config): Router {
     }
     const meetings = { ...before, [key]: parsed.meeting };
     db.prepare(`UPDATE days SET meetings = ? WHERE id = ?`).run(JSON.stringify(meetings), ensureDay(db, user.id, date));
+    res.json({ meetings } satisfies MeetingsResponse);
+  });
+
+  // A day's own entry for one meeting goes: a one-off leaves the day, and a weekly one follows its
+  // usual times there again. One the day doesn't hold is gone already.
+  r.delete('/:date/meetings/:uid', (req, res) => {
+    const user = currentUser(req);
+    const { date, uid } = req.params;
+    if (!UID_RE.test(uid)) return refuse(res, 400, "uid must be a meeting's id.");
+    const stored = findDay(db, user.id, date);
+    const { [uid.toLowerCase()]: _gone, ...meetings } = stored ? meetingsOf(stored) : {};
+    if (stored) db.prepare(`UPDATE days SET meetings = ? WHERE id = ?`).run(JSON.stringify(meetings), stored.id);
     res.json({ meetings } satisfies MeetingsResponse);
   });
 

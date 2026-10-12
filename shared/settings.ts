@@ -134,7 +134,33 @@ export interface Settings {
   layout: { id: CardId; visible: boolean; side: CardSide }[];
   /** Automatic prune of this user's days older than `days`. */
   retention: RetentionSettings;
+  /** Meetings that repeat on weekdays; a day's own `meetings` move or skip one on that day. */
+  meetings: WeeklyMeeting[];
 }
+
+/**
+ * One part of a meeting on chosen weekdays, from `since` to `until` (null while it repeats). A
+ * change to its days or times ends the part yesterday and starts another under the same uid today,
+ * so the days before keep it as it was; a day's `meetings` key moves or skips whichever part is on.
+ * A uid's parts never overlap.
+ */
+export interface WeeklyMeeting {
+  uid: string;
+  title: string;
+  /** ISO weekdays, Monday 1, ascending. */
+  weekdays: number[];
+  /** Minutes after the local midnight. */
+  start: number;
+  end: number;
+  since: string;
+  until: string | null;
+}
+
+/**
+ * Weekly meeting parts a user's settings keep: a sanity cap, not a product limit. Past it the parts
+ * that ended longest ago go, and a new weekly meeting is refused once running ones fill it.
+ */
+export const WEEKLY_MEETINGS_MAX = 100;
 
 /** Priority rows a day can hold; the server rejects more, the card stops offering "Add". */
 export const MAX_PRIORITIES = 20;
@@ -227,4 +253,5 @@ export const DEFAULT_SETTINGS: Settings = deepFreeze({
   },
   layout: normalizeLayout([]),
   retention: { enabled: false, days: 365 },
+  meetings: [],
 });

@@ -407,15 +407,30 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   off `useTimer().finished`, which only a finish by hand sets (Finish, Done, the finish choice, −
   past the time worked), never the auto-finish or another device.
 - **A meeting is a block on a day** (`Day.meetings`, the `days.meetings` JSON): time at work that is
-  neither focus nor rest, a uid to `{ title, startsAt, endsAt }`, or null for one taken off the day.
-  `PUT /days/:date/meetings` sets one uid and keeps the others, as the snooze route sets one alarm,
-  so two devices editing different meetings both land; the server stores the title as `meetingTitle`
-  (`shared/text.ts`) gives it, which the day store's `setMeeting` shows at once. A day holds at most
-  `MEETINGS_PER_DAY` keys, null ones included, and the prune takes them with their day. The
-  Meetings card (`Meetings.tsx`) lists them by start (`dayMeetings`, `lib/meetings.ts`): a time typed
-  on a row saves the moment it is complete, as a punch does, a new start keeps the meeting's length,
-  an end at or before the start is refused in place (`MEETING_ENDS_FIRST`), the title saves on blur
-  or Enter, and × takes the meeting off the day.
+  neither focus nor rest, a uid to `{ title, startsAt, endsAt }`, or null for a weekly meeting taken
+  off the day. `PUT /days/:date/meetings` sets one uid and keeps the others, as the snooze route sets
+  one alarm, so two devices editing different meetings both land; `DELETE /days/:date/meetings/:uid`
+  clears one (a one-off leaves the day, a weekly one follows its usual times again), and one the day
+  doesn't hold counts as cleared. The server stores a title as `meetingTitle` (`shared/text.ts`)
+  gives it, which the day store's `setMeeting` shows at once (`clearMeeting` beside it). A day holds
+  at most `MEETINGS_PER_DAY` keys, null ones included, and the prune takes them with their day. The
+  Meetings card (`Meetings.tsx`) lists them by start (`dayMeetings`, `lib/meetings.ts`), holding each
+  row in its place while the focus is in the card, since a time saves on each key: a time typed on a
+  row saves the moment it is complete, as a punch does, a new start keeps the meeting's length, an end
+  at or before the start is refused in place (`MEETING_ENDS_FIRST`), the title saves on blur or Enter,
+  and × takes the meeting off the day. A weekly meeting is `Settings.meetings`, a list saved whole
+  (`WeeklyMeeting`, `mergeMeetings` in `server/settings.ts`): parts sharing a uid, each on its weekdays
+  from `since` to `until` (null while it repeats), never overlapping; past `WEEKLY_MEETINGS_MAX` the
+  parts that ended longest ago go, and Add refuses a new one once running ones fill it. `dayMeetings`
+  lays a day's key over the part that is on that date: times typed on a weekly row move it on that
+  day only, stored with title null (the meeting's own title shows, and the entry shows nothing once
+  the weekly meeting is gone), × skips it there (null), listed with Put Back, which clears the key.
+  Its title is the meeting's on every day (`renameWeekly`, as a task's rename shows on past days). Its
+  days button opens the days (`RepeatDays`, shared with the board's card dialog), the usual time and
+  Stop Repeating (it asks), which change it from today on: the running part ends yesterday and
+  another carries on under the same uid (`changeWeekly`, `stopWeekly`), so the days before keep it as
+  it was. A press that takes its row away hands the focus to the next row's ×. Reset All Settings
+  clears them, and two devices editing the list at once keep one edit, as with the other lists.
 - **A break is a row in the day's log** (`breaks` table, `Day.breaks`), never device state.
   `ended_at` is the planned end from the start and moves back when the break is ended early
   (`POST /breaks/:id/end`), so nothing finishes a break that runs out: it is running while `endedAt`

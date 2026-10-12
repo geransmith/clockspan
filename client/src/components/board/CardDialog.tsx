@@ -4,10 +4,10 @@ import { hasNote } from '../../../../shared/text.js';
 import { useFollowedDraft } from '../../hooks/useFollowedDraft';
 import { useModalDialog } from '../../hooks/useModalDialog';
 import { categoryOf, COLUMN_NAMES, moveTargets, type BoardItem, type CategoryPick, type ColumnId } from '../../lib/board';
-import { WEEKDAYS } from '../../lib/recurring';
 import { CategoryChip } from '../CategoryChip';
 import { X } from '../Icons';
 import { NoteField } from '../Note';
+import { RepeatDays } from '../RepeatDays';
 import { TimerLengths } from '../TimerLengths';
 import { CategoryTag } from './BoardCard';
 
@@ -120,46 +120,6 @@ export function CardDialog({ item, today, pick, onClose, onMove, onRename, onCat
         )}
       </div>
     </dialog>
-  );
-}
-
-/**
- * A task's seven days, each a button pressed while it is on. The last day on stays on, and stays
- * focusable, so a recurring priority is always offered on some day; Stop Repeating ends it.
- */
-function RepeatDays({ id, days, onDay, onStop }: { id: string } & NonNullable<Props['repeat']>) {
-  return (
-    <div className="board-repeat" role="group" aria-labelledby={id}>
-      <span id={id} className="muted small">
-        Repeat
-      </span>
-      <div className="weekdays">
-        {WEEKDAYS.map(({ day, letter, name }) => {
-          const on = days.includes(day);
-          const last = on && days.length === 1;
-          return (
-            <button
-              key={day}
-              type="button"
-              className="chip"
-              onClick={() => {
-                if (!last) onDay(day, !on);
-              }}
-              aria-pressed={on}
-              aria-disabled={last || undefined}
-              aria-label={name}
-            >
-              {letter}
-            </button>
-          );
-        })}
-      </div>
-      {onStop && (
-        <button className="btn btn-ghost" onClick={onStop}>
-          Stop Repeating
-        </button>
-      )}
-    </div>
   );
 }
 

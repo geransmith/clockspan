@@ -124,6 +124,8 @@ interface DayStore {
   setSnoozedUntil: (date: string, alarm: AlarmId, until: number) => Promise<boolean>;
   /** One meeting by its uid, or null to take it off the day; the day's other meetings, maybe another device's, stay. */
   setMeeting: (date: string, uid: string, meeting: Meeting | null) => Promise<boolean>;
+  /** Clears the day's own entry for a meeting: a one-off leaves the day, a weekly one follows its usual times again. */
+  clearMeeting: (date: string, uid: string) => Promise<boolean>;
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
   setRetro: (date: string, patch: api.RetroPatch) => Promise<boolean>;
@@ -582,8 +584,21 @@ export function DayProvider({ children }: { children: ReactNode }) {
     (date: string, uid: string, meeting: Meeting | null) =>
       putDayFields(
         date,
-        (d) => ({ ...d, meetings: { ...d.meetings, [uid]: meeting && { ...meeting, title: meetingTitle(meeting.title) } } }),
+        (d) => ({ ...d, meetings: { ...d.meetings, [uid]: meeting && { ...meeting, title: meeting.title === null ? null : meetingTitle(meeting.title) } } }),
         () => api.putMeeting(date, uid, meeting),
+      ),
+    [putDayFields],
+  );
+
+  const clearMeeting = useCallback(
+    (date: string, uid: string) =>
+      putDayFields(
+        date,
+        (d) => {
+          const { [uid]: _cleared, ...meetings } = d.meetings;
+          return { ...d, meetings };
+        },
+        () => api.deleteMeeting(date, uid),
       ),
     [putDayFields],
   );
@@ -753,6 +768,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setOvertimeApproved,
       setSnoozedUntil,
       setMeeting,
+      clearMeeting,
       setWorkMinutes,
       setRetro,
       setOfferAnswered,
@@ -778,6 +794,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       setOvertimeApproved,
       setSnoozedUntil,
       setMeeting,
+      clearMeeting,
       setWorkMinutes,
       setRetro,
       setOfferAnswered,

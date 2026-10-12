@@ -1338,22 +1338,22 @@ button {
   align-self: flex-start;
   color: var(--accent-ink);
 }
-/* Meetings: on a phone a row is its times and × with the title under them, a hairline between
-   meetings; from 640 px one line each. */
+/* Meetings: on a phone a row is its times and × over its title (and a weekly one's days button),
+   a hairline between meetings; from 640 px one line each. A new meeting's form stacks. */
 .meetings {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
-}
-.meeting-row + .meeting-row {
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-8);
 }
 .meeting-row {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--space-6);
+}
+.meeting-row + .meeting-row {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-8);
 }
 .meeting-times {
   display: flex;
@@ -1363,17 +1363,47 @@ button {
 .meeting-times .timefield {
   flex: 1;
 }
-.meeting-row .meeting-title,
-.meeting-row .error {
-  grid-column: 1 / -1;
+.meeting-row > .meeting-times {
+  grid-row: 1;
+  grid-column: 1;
 }
 .meeting-remove {
   grid-row: 1;
   grid-column: 2;
   color: var(--text-3);
 }
+.meeting-row .meeting-title,
+.meeting-row .error,
+.meeting-weekly {
+  grid-column: 1 / -1;
+}
+/* On its own line on a phone, so the × column stays the ×'s width. */
+.meeting-days {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0 var(--space-10);
+}
+.meeting-weekly,
+.meeting-usual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.meeting-skipped {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-3);
+}
+.meeting-skipped-name {
+  flex: 1;
+}
 .meeting-new {
   grid-template-columns: 1fr;
+}
+.meeting-new > .meeting-times {
+  grid-row: auto;
 }
 .meeting-new-actions {
   display: flex;
@@ -1385,25 +1415,35 @@ button {
 }
 @media (min-width: 640px) {
   .meeting-row {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto;
   }
   .meeting-row + .meeting-row {
     border-top: 0;
     padding-top: 0;
   }
   .meeting-row .meeting-title {
-    grid-column: auto;
+    grid-row: 1;
+    grid-column: 2 / 4;
   }
-  .meeting-remove {
+  .meeting-row.is-weekly .meeting-title {
+    grid-column: 2;
+  }
+  .meeting-days {
+    grid-row: 1;
     grid-column: 3;
   }
+  .meeting-remove {
+    grid-column: 4;
+  }
   .meeting-new {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
   }
   .meeting-new .meeting-title {
-    grid-column: 1 / -1;
+    grid-row: auto;
+    grid-column: auto;
   }
 }
+
 .punch-clear,
 .punch-remove {
   color: var(--text-3);
@@ -2791,7 +2831,7 @@ button.calendar-day:hover:not(:disabled, [aria-pressed='true']) {
 }
 .board-move,
 .board-start,
-.board-repeat {
+.repeat-days {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
