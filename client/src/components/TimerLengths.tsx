@@ -12,7 +12,16 @@ import { dismissByTag, offerNotifications, unlockAudio } from '../lib/alerts';
  * The tap also takes the timer's ending banners down (`'timer-complete'`), so the stack clears from
  * the tap rather than only once the start answers.
  */
-export function TimerLengths({ onStart, disabled }: { onStart: (minutes: number) => void; disabled: boolean }) {
+export function TimerLengths({
+  onStart,
+  disabled,
+  over,
+}: {
+  onStart: (minutes: number) => void;
+  disabled: boolean;
+  /** Why a length is muted (it runs into the next meeting), or null; still started on a tap. */
+  over?: (minutes: number) => string | null;
+}) {
   const { settings, loaded } = useSettings();
   const lengths = [...new Set(settings.timerMinutes)].sort((a, b) => a - b);
   const tap = (minutes: number) => {
@@ -25,12 +34,15 @@ export function TimerLengths({ onStart, disabled }: { onStart: (minutes: number)
   };
   return (
     <div className="timer-quick">
-      {lengths.map((m) => (
-        <button key={m} className="btn btn-quick" onClick={() => tap(m)} disabled={disabled}>
-          <span className="timer-quick-num">{m}</span>
-          <span className="timer-quick-unit">min</span>
-        </button>
-      ))}
+      {lengths.map((m) => {
+        const why = over?.(m) ?? null;
+        return (
+          <button key={m} className={`btn btn-quick${why ? ' btn-quick--over' : ''}`} onClick={() => tap(m)} disabled={disabled} title={why ?? undefined}>
+            <span className="timer-quick-num">{m}</span>
+            <span className="timer-quick-unit">min</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

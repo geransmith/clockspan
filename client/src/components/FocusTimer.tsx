@@ -10,7 +10,7 @@ import { useTimer } from '../hooks/useTimer';
 import type { CategoryPick } from '../lib/board';
 import { BREAK, MEETING, SAVE_FAILED } from '../lib/copy';
 import { floorToMinute, formatCountdown, formatDuration } from '../lib/format';
-import { dayMeetings, defaultUntil, MEETING_UNTIL_MAX_MINUTES, meetingAt, type MeetingRow } from '../lib/meetings';
+import { dayMeetings, defaultUntil, MEETING_UNTIL_MAX_MINUTES, meetingAt, nextMeeting, type MeetingRow } from '../lib/meetings';
 import { hasRoom, isTaskRow, newUid } from '../lib/priorities';
 import { LIMITS } from '../../../shared/api.js';
 import { MINUTE_MS } from '../../../shared/dates.js';
@@ -39,8 +39,10 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
   const { settings } = useSettings();
   const { hour12, formatTime } = useTimeFormat();
   const now = useClock();
-  // The meeting on now, and Until's time while Meeting's row is open.
-  const inMeeting = isToday ? meetingAt(dayMeetings(date, meetings, settings.meetings), now) : null;
+  // The meeting on now, or the next one to start, and Until's time while Meeting's row is open.
+  const meetingRows = isToday ? dayMeetings(date, meetings, settings.meetings) : [];
+  const inMeeting = meetingAt(meetingRows, now);
+  const next = inMeeting ? null : nextMeeting(meetingRows, now);
   const [until, setUntil] = useState<number | null>(null);
   // A timer or a meeting that starts while it is open (here, on the board, another device) closes it.
   if (until != null && (timer.running || inMeeting)) setUntil(null);
@@ -185,7 +187,16 @@ export function FocusTimer({ date, isToday, priorities, meetings, pick }: Props)
           </button>
         </PassFocusOnLeave>
       )}
-      <TimerLengths onStart={start} disabled={!isToday || held} />
+      {next && (
+        <p className="timer-free">
+          {MEETING.freeUntil(next.meeting.title, formatTime(next.meeting.startsAt))} · <strong>{formatDuration((next.meeting.startsAt - now) / 1000)}</strong>
+        </p>
+      )}
+      <TimerLengths
+        onStart={start}
+        disabled={!isToday || held}
+        over={(m) => (next && now + m * MINUTE_MS > next.meeting.startsAt ? MEETING.runsInto(next.meeting.title, formatTime(next.meeting.startsAt)) : null)}
+      />
       {isToday && (
         <div className="timer-actions">
           {breakTimer.endsAt == null && (

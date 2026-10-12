@@ -90,7 +90,9 @@ what `npm run seed` writes.
   ("Mon–Fri") that opens the days, the usual time and Stop Repeating under it; × leaves it listed,
   muted, "skipped", with Put Back (which takes the focus). On the timer card, Break and Meeting sit
   side by side; Meeting opens Until with Start Meeting focused, and Start Meeting shows "In … until …"
-  with a countdown and End Meeting, at 1280 and the 375 preset.
+  with a countdown and End Meeting, at 1280 and the 375 preset. With the seeded call still ahead,
+  "Free until Customer call at …" sits over the lengths, and those that would run into it are muted
+  with "Runs into …" as their title.
 - **Priorities or the timer card**: tick one row and press Add Priority (the notice lists the
   ticked row); in the timer's label box, the list of open rows on a press and on Tab (not on the
   focus Finish hands back), under the box at its width and over the card, whose height stays put as
