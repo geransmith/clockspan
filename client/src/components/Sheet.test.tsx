@@ -664,8 +664,8 @@ describe('Sheet: the recurring priorities due today', () => {
     await renderSheet();
     expect(offered()).toEqual(['Invoices', 'Monitor the queue']);
     fireEvent.click(button(TODAY_OFFER.notToday));
-    await settle();
     expect(document.querySelector('.today-offer')).toBeNull();
+    await settle();
     expect(api.putOffer).toHaveBeenCalledExactlyOnceWith(TODAY);
     expect(api.putPriorities).not.toHaveBeenCalled();
     await reload();

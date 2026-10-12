@@ -738,7 +738,7 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   a row the notice added brings nothing back, and no route or control clears a stamp (a reseed or
   a prune deletes the day, and the stamp with it). The notice waits for the leftovers' read
   (answered, failed or never made: `useLeftOpen`'s `settled`) as well as the board's, so a stamp
-  covers what was shown.
+  covers what was shown, unless that read failed or was never made.
 - **In Progress is today's list** (`client/src/lib/board.ts`, `hooks/useBoard.tsx`). The board
   shows the tasks `GET /board` sends (`boardJson`: the one-off tasks in Later or Next that aren't
   done, then every other one whose latest entry is from `LIST_WINDOW_DAYS` back to

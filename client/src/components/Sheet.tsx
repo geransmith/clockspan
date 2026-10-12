@@ -68,7 +68,7 @@ export const Sheet = memo(function Sheet({ date, today, now, customize, onToggle
   // only the tasks the server has confirmed, as the routines do; until the board has loaded,
   // nothing is offered. A day whose offer was answered, on any device, offers nothing and makes no
   // lookback read. The notice waits for that read too (answered, failed or never made), so an
-  // answer stamps only what was shown.
+  // answer stamps only what was shown, unless that read failed or was never made.
   const answered = day?.offerAnsweredAt != null;
   const { leftOpen, planned, settled } = useLeftOpen(today, isToday && day != null && !answered && !day.priorities.some(isOneOff));
   const { board, confirmedRecurring, confirmedCards } = useBoardState();

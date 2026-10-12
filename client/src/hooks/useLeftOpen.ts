@@ -17,8 +17,8 @@ import { useRange } from './useRange';
  * waits for it and leaves them out, so a task left open is never offered there first, nor one
  * ticked there since the board was read. A failed fetch offers nothing: the offer is a shortcut,
  * not worth a banner. `settled` is true once the read has answered or failed, and while it isn't
- * wanted: the sheet holds the whole notice until then, so an answer covers only what was shown,
- * and never waits on a read that won't come.
+ * wanted: the sheet holds the whole notice until then, so an answer covers only what was shown
+ * (unless the read failed or was never made), and never waits on a read that won't come.
  */
 export function useLeftOpen(today: string, wanted: boolean): { leftOpen: LeftOpen | null; planned: ReadonlySet<string | null> | null; settled: boolean } {
   const { days, failed } = useRange(addDays(today, -LOOKBACK_DAYS), addDays(today, -1), wanted);
