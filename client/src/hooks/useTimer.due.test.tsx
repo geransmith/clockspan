@@ -108,7 +108,6 @@ describe("time's up", () => {
     expect(result.current.timer.running).toBeNull();
     // Nobody pressed Finish: nothing for a break suggestion to follow.
     expect(result.current.timer.finished).toBeNull();
-    // It stays until closed: nobody was there when it ended.
     expect(alert).toHaveBeenLastCalledWith(
       expect.objectContaining({
         kicker: TIMER_KICKER,

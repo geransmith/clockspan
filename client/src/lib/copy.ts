@@ -214,7 +214,7 @@ export const FINISH_CHOICE = {
   back: 'Back',
 } as const;
 
-/** The kicker of the two banners a session that ended without the user raises, which then stay until closed. */
+/** The kicker on the timer's two ending banners (Focus Session Complete, Focus Session Closed). */
 export const TIMER_KICKER = 'Focus timer';
 
 /** The alert when a timer that ran out got no answer and was logged at its planned length; `over` is the time past it. */
@@ -229,7 +229,7 @@ export const TIMER_PAUSED_OUT = {
   body: (name: string, duration: string) => named(name, `${duration} logged. It sat paused for an hour, so it ended where the pause began.`),
 } as const;
 
-/** The focus timer's break: the button, the line while it runs, and the banner when it's over, with its kicker. */
+/** The focus timer's break: the button, the line while it runs, and the banner when it's over. */
 export const BREAK = {
   start: (minutes: number, long: boolean) => `${long ? 'Long Break' : 'Break'} · ${minutes} min`,
   running: (until: string) => `Break until ${until}`,
