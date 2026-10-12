@@ -4,7 +4,8 @@ import { dayTimeclock, type TimeclockSettings } from './timeclock';
 export interface WeekHours {
   /**
    * Worked from Monday up to and including the day, by the same math as each day's sheet. A day
-   * whose punches are out of order counts nothing: its sheet shows no worked time either.
+   * whose punches are out of order, or an earlier one left clocked in (`unclosed`), counts nothing:
+   * its sheet shows no worked time either.
    */
   workedSeconds: number;
   targetSeconds: number;
@@ -15,6 +16,8 @@ export interface WeekHours {
    * "0m over" just as the target is reached. 0 without a target.
    */
   overSeconds: number;
+  /** The dates of the earlier days left clocked in, in the order `days` came in. */
+  unclosed: string[];
 }
 
 /**
@@ -23,11 +26,20 @@ export interface WeekHours {
  * past), against the weekly target.
  */
 export function weekHours(days: Day[], settings: TimeclockSettings & { weekMinutes: number }, today: string, now: number): WeekHours {
-  const workedSeconds = days.reduce((sum, d) => {
+  let workedSeconds = 0;
+  const unclosed: string[] = [];
+  for (const d of days) {
     const tc = dayTimeclock(d, settings, today, now);
-    return tc.outOfOrder ? sum : sum + tc.workedSeconds;
-  }, 0);
+    if (tc.unclosed) unclosed.push(d.date);
+    else if (!tc.outOfOrder) workedSeconds += tc.workedSeconds;
+  }
   const targetSeconds = settings.weekMinutes * 60;
   const over = workedSeconds - targetSeconds;
-  return { workedSeconds, targetSeconds, met: targetSeconds > 0 && workedSeconds >= targetSeconds, overSeconds: targetSeconds > 0 && over >= 60 ? over : 0 };
+  return {
+    workedSeconds,
+    targetSeconds,
+    met: targetSeconds > 0 && workedSeconds >= targetSeconds,
+    overSeconds: targetSeconds > 0 && over >= 60 ? over : 0,
+    unclosed,
+  };
 }

@@ -3,7 +3,7 @@ import { startOfMonth } from '../../../shared/dates.js';
 import { useRange } from '../hooks/useRange';
 import { useSettings } from '../hooks/useSettings';
 import { calendarMonth, type CalendarDay } from '../lib/calendar';
-import { CHECK_PUNCHES, LOAD_FAILED } from '../lib/copy';
+import { CHECK_PUNCHES, LOAD_FAILED, NO_CLOCK_OUT } from '../lib/copy';
 import { counted, dayName, formatDateLong, formatDuration, formatHours, formatWeekday, plural } from '../lib/format';
 import { hasContent } from '../lib/retro';
 import { periodRange } from '../lib/review';
@@ -173,6 +173,8 @@ function DayCell({
   if (full) cls.push('is-full');
   // With hours not tracked a cell shows only that the day has something on it.
   const clocked = trackHours && d.timeclock?.clockIn != null ? d.timeclock : null;
+  // Why a clocked-in day has no hours to show, if it has none.
+  const noHours = clocked?.outOfOrder ? CHECK_PUNCHES : clocked?.unclosed ? NO_CLOCK_OUT : null;
   let label: string;
   let face: ReactNode = null;
   if (shown) {
@@ -186,11 +188,11 @@ function DayCell({
         ))}
       </span>
     );
-  } else if (clocked?.outOfOrder) {
+  } else if (noHours) {
     // The cell is too narrow for the words: a dash, as the sheet's Worked tile shows, and the words to hover or hear.
-    label = CHECK_PUNCHES.toLowerCase();
+    label = noHours.toLowerCase();
     face = (
-      <span className="calendar-worked" title={CHECK_PUNCHES}>
+      <span className="calendar-worked" title={noHours}>
         —
       </span>
     );
@@ -255,8 +257,10 @@ function DayDetail({
         {trackHours && (
           <Tile
             label="Worked"
-            value={tc.clockIn != null && !tc.outOfOrder ? formatDuration(tc.workedSeconds) : '—'}
-            sub={tc.clockIn == null ? 'no clock-in' : tc.outOfOrder ? CHECK_PUNCHES : tc.lunchStatus === 'taken' ? 'lunch taken' : ''}
+            value={tc.clockIn != null && !tc.outOfOrder && !tc.unclosed ? formatDuration(tc.workedSeconds) : '—'}
+            sub={
+              tc.clockIn == null ? 'no clock-in' : tc.outOfOrder ? CHECK_PUNCHES : tc.unclosed ? NO_CLOCK_OUT : tc.lunchStatus === 'taken' ? 'lunch taken' : ''
+            }
           />
         )}
         <Tile

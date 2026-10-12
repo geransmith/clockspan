@@ -459,7 +459,10 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   the one it should come after) are named by the sheet's notice (`PUNCH_ORDER`), which describes
   that row's field; such a day counts in no hours total (the week line, Review's worked time and
   target) and shows a dash and `CHECK_PUNCHES` wherever its own hours would show (the sheet's tiles,
-  the board's clock bar, History's cell and day panel).
+  the board's clock bar, History's cell and day panel). A past day still clocked in with its punches
+  in order (`unclosed`) also counts in no hours total, shows a dash and `NO_CLOCK_OUT` wherever its
+  own hours would show (the sheet's Worked tile, History's cell and day panel), and the week line
+  names it last ("· Tue has no clock-out").
 - **A punch row saves only complete times.** `TimeField` (React Aria segments) commits the moment
   hour, minute and period are all filled, and throws a half-typed draft away when focus leaves the
   field or on Escape, which keeps focus in the field, so the row never shows a time the server
@@ -747,7 +750,8 @@ scratchpad. The level a change is proven at is under "Verification expectations"
   before today with a row written. Today is left out because it is still going, and it is null under
   two such days; Review shows it for a Week or a Month. The Days tile's target is `periodTarget`: a
   Week's is the Work week setting, as on the timeclock's week line, and a Month's or a Quarter's is
-  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings`. Not Done groups
+  `targetSeconds`, the clocked-in days' own lengths added up through `daySettings` (a day out of
+  order or left clocked in is left out). Not Done groups
   the one-off rows left open by their task (`addToNotDone`; `OpenPriority.key` is the uid of the
   task that opened the entry): a tick settles that task's earlier open days. A one-off typed again
   by hand on a later day is a new task, so a narrow text fallback keeps such rows together: a task

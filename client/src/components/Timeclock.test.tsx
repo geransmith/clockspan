@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsProvider } from '../hooks/useSettings';
 import { playSound, unlockAudio } from '../lib/alerts';
 import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
+import type { WeekHours } from '../lib/week';
 import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
@@ -20,7 +21,7 @@ function Card(props: Omit<ComponentProps<typeof Timeclock>, 'typing' | 'onTyping
   return <Timeclock {...props} typing={typing} onTyping={setTyping} />;
 }
 
-async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
+async function renderCard(date = TODAY, punches: Punch[] = punchesAt(), week: WeekHours | null = null) {
   const onEditingChange = vi.fn<(editing: boolean) => void>();
   const onChange = vi.fn<(punches: Punch[]) => void>();
   const card = (p: Punch[], now = T0) => (
@@ -33,7 +34,7 @@ async function renderCard(date = TODAY, punches: Punch[] = punchesAt()) {
         tc={dayTimeclock({ date, punches: p, workMinutes: null }, makeSettings(), TODAY, now)}
         overtimeApproved={false}
         workMinutes={null}
-        week={null}
+        week={week}
         focus={{ seconds: 0, count: 0 }}
         onChange={onChange}
         onOvertimeChange={vi.fn()}
@@ -216,5 +217,19 @@ describe('Timeclock', () => {
     // Yesterday from 8:00 and never clocked out: judged at its end, 16 h in.
     await renderCard(YESTERDAY, punchesAt(T0 - 25 * HOUR_MS));
     expect(screen.queryByText(/Second meal period/)).toBeNull();
+  });
+
+  it('names the days this week left clocked in last on the week line', async () => {
+    const week = (unclosed: string[]): WeekHours => ({ workedSeconds: 26 * 3600, targetSeconds: 40 * 3600, met: false, overSeconds: 0, unclosed });
+    const line = () => screen.getByText(/^This week/).textContent;
+    // TODAY is a Monday, so these are the week before's Monday and Tuesday.
+    await renderCard(TODAY, punchesAt(), week([]));
+    expect(line()).toBe('This week 26h 00m of 40h 00m');
+    cleanup();
+    await renderCard(TODAY, punchesAt(), week(['2026-09-22']));
+    expect(line()).toMatch(/ · Tue has no clock-out$/);
+    cleanup();
+    await renderCard(TODAY, punchesAt(), week(['2026-09-21', '2026-09-22']));
+    expect(line()).toMatch(/ · Mon, Tue have no clock-out$/);
   });
 });
