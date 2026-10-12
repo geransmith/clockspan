@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { unlockAudio } from './lib/alerts';
 import { reloadForNewBuild } from './lib/reload';
 import { applyTheme, storedTheme } from './lib/theme';
 import './styles.css';
@@ -23,6 +24,11 @@ createRoot(document.getElementById('root')!).render(
 // the reload lands, and when no reload is made (one a moment ago, or offline) its Reload button
 // is the way out.
 window.addEventListener('vite:preloadError', () => void reloadForNewBuild(() => window.location.reload()));
+
+// Every tap and key unlocks the sound: a touch's `pointerdown` isn't a user gesture, and iOS
+// suspends audio again when the app goes to the background. Capture, so no handler hides one.
+window.addEventListener('pointerup', unlockAudio, { capture: true });
+window.addEventListener('keydown', unlockAudio, { capture: true });
 
 // The service worker caches nothing; alerts.ts shows notifications through it where the
 // browser refuses `new Notification()` (Chrome on Android).

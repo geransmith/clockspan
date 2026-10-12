@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MINUTE_MS } from '../../../shared/dates.js';
 import { punchesKey } from '../../../shared/punches.js';
 import { missedClockIn } from '../lib/alarms';
-import { dismissByTag, unlockAudio, warnQuietly } from '../lib/alerts';
+import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { daySettings, dayTimeclock, overtimeOn } from '../lib/timeclock';
 import { useAlarms } from './useAlarms';
@@ -51,6 +51,8 @@ export function useTodayAlarms(today: string, now: number, openRetro: () => void
     missedClockIn: day ? missedClockIn(day, settings) : null,
     clockInAt: (at) => {
       unlockAudio();
+      // No `loaded &&`: the banner waits for `tc`, which waits for the settings.
+      offerNotifications(settings.notifications);
       // Only while Clock in is empty: one that reached this page before the press stands.
       void store.editPunches(today, (rows) => (rows[0]?.at === null ? rows.map((p) => (p.position === 0 ? { ...p, at } : p)) : null));
     },

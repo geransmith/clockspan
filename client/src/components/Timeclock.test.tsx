@@ -2,14 +2,15 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { type ComponentProps, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as api from '../api';
 import { SettingsProvider } from '../hooks/useSettings';
-import { playSound, unlockAudio } from '../lib/alerts';
+import { offerNotifications, playSound, unlockAudio } from '../lib/alerts';
 import { addPunchPair, dayTimeclock, removePunchPair, type PairTyping } from '../lib/timeclock';
 import type { WeekHours } from '../lib/week';
-import { makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
+import { deferredAnswer, makeSettings, punchesAt, settle, T0, TODAY, YESTERDAY } from '../test/hooks';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { MAX_PUNCHES } from '../../../shared/punches.js';
-import type { Punch } from '../types';
+import type { Punch, Settings } from '../types';
 import { Timeclock } from './Timeclock';
 
 vi.mock('../api');
@@ -54,6 +55,11 @@ const field = (label: string) => within(screen.getByRole('group', { name: `${lab
 const nowButton = () => screen.getByRole('button', { name: 'Now: Clock in' });
 const labels = () => [...document.querySelectorAll('.punch-label')].map((l) => l.textContent);
 const focus = (el: HTMLElement) => act(() => el.focus());
+/** A key typed into the focused segment, as `TimeField.test.tsx` types it. */
+const typeKey = (data: string) =>
+  act(() => {
+    document.activeElement!.dispatchEvent(new InputEvent('beforeinput', { data, inputType: 'insertText', bubbles: true, cancelable: true }));
+  });
 
 beforeEach(() => {
   vi.useFakeTimers({ now: T0 });
@@ -142,6 +148,34 @@ describe('Timeclock', () => {
     expect(tile().classList.contains('tile--warn')).toBe(true);
     expect(tile().querySelector('.tile-value')!.textContent).toBe('—');
     expect(tile().querySelector('.tile-sub')).toBeNull();
+  });
+
+  it("asks for notifications on today's Clock in, in the tap before the save", async () => {
+    const { onChange } = await renderCard();
+    fireEvent.click(nowButton());
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
+    expect(vi.mocked(unlockAudio).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(offerNotifications).mock.invocationCallOrder[0]!);
+    expect(vi.mocked(offerNotifications).mock.invocationCallOrder[0]).toBeLessThan(onChange.mock.invocationCallOrder[0]!);
+  });
+
+  it('asks for nothing before the settings have loaded, since the switch may be off', async () => {
+    vi.mocked(api.getSettings).mockReturnValue(deferredAnswer<Settings>().promise);
+    await renderCard();
+    fireEvent.click(nowButton());
+    expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('asks for nothing on another punch, on × or on a Clock in typed on another day', async () => {
+    const { onChange } = await renderCard(TODAY, punchesAt(T0 - HOUR_MS));
+    fireEvent.click(screen.getByRole('button', { name: 'Now: Lunch out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Clock in' }));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    cleanup();
+    const yesterday = await renderCard(YESTERDAY, punchesAt(null));
+    focus(field('Clock in'));
+    for (const key of ['8', '3', '0']) typeKey(key);
+    expect(yesterday.onChange).toHaveBeenCalled();
+    expect(offerNotifications).not.toHaveBeenCalled();
   });
 
   it('undoes an Add removed before any punch changes', async () => {
