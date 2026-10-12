@@ -101,6 +101,47 @@ describe('dueEvents', () => {
     ]);
   });
 
+  describe('in a meeting', () => {
+    const leads = (id: AlarmId = 'clockOut') => [15, 5, 1].map((m) => eventKey(id, 'lead', m, T));
+    const meeting = (targets: AlarmTarget[], fired: Set<string>, now: number) => dueEvents(targets, alarms(), fired, now, {}, true);
+
+    it('holds the warnings and repeats, and the latest one missed rings once it ends', () => {
+      expect(meeting([target(T)], new Set(), T - 5 * MINUTE_MS)).toEqual({ fire: [], crossed: [], snoozed: [] });
+      const after = dueEvents([target(T)], alarms(), new Set(), T - 3 * MINUTE_MS);
+      expect(after.fire.map((e) => [e.kind, e.minutes])).toEqual([['lead', 5]]);
+      expect(after.crossed).toEqual(leads().slice(0, 2));
+    });
+
+    it("rings a deadline's own ring once, crossing the warnings before it, and holds the repeats after it", () => {
+      const fired = new Set<string>();
+      const atDue = meeting([target(T)], fired, T + MINUTE_MS);
+      expect(atDue.fire.map((e) => e.kind)).toEqual(['due']);
+      expect(atDue.crossed).toEqual([...leads(), eventKey('clockOut', 'due', 0, T)]);
+      for (const k of atDue.crossed) fired.add(k);
+      // A ring past due while in it, never rung before: the deadline's own ring sounds, and the repeat waits.
+      const late = meeting([target(T)], new Set(), T + 12 * MINUTE_MS);
+      expect(late.fire.map((e) => e.kind)).toEqual(['due']);
+      expect(late.crossed).not.toContain(eventKey('clockOut', 'overdue', 10, T));
+      expect(meeting([target(T)], fired, T + 12 * MINUTE_MS).fire).toEqual([]);
+      expect(dueEvents([target(T)], alarms(), fired, T + 12 * MINUTE_MS).fire.map((e) => [e.kind, e.minutes])).toEqual([['overdue', 10]]);
+    });
+
+    it('rings the lunch, end of lunch, clock-out and second meal deadlines, and holds the break alarm and the retrospective whole', () => {
+      const ids: AlarmId[] = ['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal', 'noBreak', 'retro'];
+      const all = { ...TEST_SETTINGS.alarms };
+      for (const id of ids) all[id] = { ...all[id], enabled: true, onDue: true, leadMinutes: [] };
+      const r = dueEvents(
+        ids.map((id) => target(T, id)),
+        all,
+        new Set(),
+        T,
+        {},
+        true,
+      );
+      expect(r.fire.map((e) => e.id)).toEqual(['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal']);
+    });
+  });
+
   describe('a snooze', () => {
     // Pressed `SNOOZE_MINUTES` before it ends.
     const snoozedAt = (press: number) => press + SNOOZE_MINUTES * MINUTE_MS;

@@ -229,6 +229,22 @@ describe('useTodayAlarms', () => {
       await judged();
       expect(tags()).not.toContain('alarm:noBreak');
     });
+
+    it("waits through a meeting on today's day, typed or weekly, and rings once it ends", async () => {
+      const { rerender } = render(on, working({ meetings: { call0000: { title: 'Call', startsAt: T0 - 10 * MINUTE_MS, endsAt: T0 + 2 * MINUTE_MS } } }));
+      await judged();
+      expect(tags()).not.toContain('alarm:noBreak');
+      // Shell hands in the clock each second; here a render reads it.
+      await settle(2 * MINUTE_MS);
+      rerender();
+      expect(tags()).toContain('alarm:noBreak');
+      // TODAY, 2026-09-28, is a Monday; T0 is 9:00.
+      freshDevice();
+      const standup = { uid: 'stand000', title: 'Standup', weekdays: [1], start: 8 * 60 + 50, end: 9 * 60 + 15, since: '2026-09-01', until: null };
+      render({ ...on, meetings: [standup] }, working());
+      await judged();
+      expect(tags()).not.toContain('alarm:noBreak');
+    });
   });
 
   describe('missed clock-in', () => {

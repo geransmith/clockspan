@@ -31,6 +31,8 @@ export interface AlarmDayState extends TargetDay {
   snoozedUntil: Day['snoozedUntil'];
   /** A banner's Snooze: stores when that alarm rings again. */
   snooze: (id: AlarmId) => void;
+  /** A meeting is on now: only a deadline's own ring sounds (`dueEvents`). */
+  inMeeting: boolean;
 }
 
 // Not under ALARM_TAG: the banner is no alarm (no chime, no bell), and `clearBanners` sweeps
@@ -58,6 +60,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     timerStarting,
     snoozedUntil,
     snooze,
+    inMeeting,
   } = day;
   // Read at the press, not when the banner went up.
   const starting = useLatest(timerStarting);
@@ -127,7 +130,7 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     }
 
     const ctx = { ...settings, clockIn: tc.clockIn, hour12: resolveHour12(settings.timeFormat), now, typedClockOut: tc.typedClockOut };
-    const { fire, crossed, snoozed } = dueEvents(targets, settings.alarms, fired.current.set, now, snoozedUntil);
+    const { fire, crossed, snoozed } = dueEvents(targets, settings.alarms, fired.current.set, now, snoozedUntil, inMeeting);
     // Raised from the day, never the press, so every device and tab shows it, a reload included.
     for (const t of snoozed) {
       const until = snoozedUntil[t.id]!;
@@ -135,12 +138,13 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
       quiet.current.set(t.id, until);
       alert({ ...describeSnooze(t, until, ctx), tone: 'info', sticky: true, tag: ALARM_TAG + t.id, sound: false, notifications: false });
     }
-    // A snooze gone before its time (a failed save, Repeat turned Off, the alarm switched off).
+    // A quiet banner says when its alarm rings again: its ring replaces it, and it comes down once
+    // that is no longer true, a snooze gone before its time (a failed save, Repeat turned Off, the
+    // alarm switched off) or its time passed with no ring here (a meeting holding it, another tab).
     for (const [id, until] of quiet.current) {
-      if (now < until && !snoozed.some((t) => t.id === id)) {
-        dismissByTag(ALARM_TAG + id);
-        quiet.current.delete(id);
-      }
+      const untrue = now < until ? !snoozed.some((t) => t.id === id) : !fire.some((e) => e.id === id);
+      if (untrue) dismissByTag(ALARM_TAG + id);
+      if (untrue || now >= until) quiet.current.delete(id);
     }
     if (crossed.length === 0) return;
     for (const k of crossed) fired.current.set.add(k);
@@ -204,5 +208,6 @@ export function useAlarms(dateKey: string, tc: TimeclockResult | null, settings:
     starting,
     snoozedUntil,
     snooze,
+    inMeeting,
   ]);
 }

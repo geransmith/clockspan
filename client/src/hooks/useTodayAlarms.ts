@@ -5,6 +5,7 @@ import { missedClockIn, SNOOZE_MINUTES } from '../lib/alarms';
 import { dismissByTag, offerNotifications, unlockAudio, warnQuietly } from '../lib/alerts';
 import { LOAD_FAILED } from '../lib/copy';
 import { floorToMinute } from '../lib/format';
+import { dayMeetings, meetingAt } from '../lib/meetings';
 import { daySettings, dayTimeclock, LUNCH_IN_POSITION, overtimeOn } from '../lib/timeclock';
 import { useAlarms, type AlarmDayState } from './useAlarms';
 import { useDay, useRefreshDay } from './useDay';
@@ -65,6 +66,7 @@ export function useTodayAlarms(
     ...timer,
     approveOvertime: settings.overtimeApproval ? () => void store.setOvertimeApproved(today, true) : undefined,
     snoozedUntil: day?.snoozedUntil ?? {},
+    inMeeting: day != null && meetingAt(dayMeetings(today, day.meetings, settings.meetings), now) != null,
     // The clock is read at the press, never inside the store's `apply`.
     snooze: (id) => void store.setSnoozedUntil(today, id, Date.now() + SNOOZE_MINUTES * MINUTE_MS),
     openRetro,

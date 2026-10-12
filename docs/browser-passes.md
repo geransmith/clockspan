@@ -56,7 +56,9 @@ what `npm run seed` writes.
   alarm, after `npm run seed` (no `--running`) and with `window.confirm = () => true` set in the
   page, delete today's two breaks in the Day Log: its banner shows within a second, with
   "Start Break · 5 min" and "Snooze 15 min" laid out as Lunch Is Over's (after a reload, run
-  `localStorage.removeItem('focus:alarms')` first to see it again).
+  `localStorage.removeItem('focus:alarms')` first to see it again). Start a meeting from the timer
+  card's Meeting first and the banner waits: no banner while it is on, and End Meeting brings it
+  within a second.
 - **Sounds**: Settings → Alarms → Sounds. Test on a clip row plays the clip.
 - **The update banner**: in the page, wrap `window.fetch` so each answer that has a
   `Clockspan-Version` header names another version (a new `Response` over the same body, with

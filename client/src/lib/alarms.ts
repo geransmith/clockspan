@@ -129,6 +129,9 @@ export function snoozable(id: AlarmId, cfg: AlarmSettings): boolean {
   return id !== 'retro' && cfg.overdueEveryMinutes > 0;
 }
 
+/** The alarms whose deadline still rings, once, during a meeting: a legal or overtime line. */
+const MEETING_RINGS: readonly AlarmId[] = ['lunchBy', 'lunchEnd', 'clockOut', 'secondMeal'];
+
 /**
  * Pure scheduler. Returns the events to fire now and the keys crossed that could come round
  * again (for a repeat, only the latest), for the caller to persist. If several thresholds for
@@ -140,6 +143,10 @@ export function snoozable(id: AlarmId, cfg: AlarmSettings): boolean {
  * covered: until that time it fires and crosses nothing and is listed in `snoozed`, then it rings
  * once at that time and repeats a full interval apart from it. A deadline moved past the press
  * isn't covered, and rings on its own schedule.
+ *
+ * `inMeeting` (a meeting is on now) lets only a deadline's own ring sound (`MEETING_RINGS`),
+ * crossing the warnings before it; every other event, the break alarm and the retrospective
+ * included, is left uncrossed, so the latest one missed rings once the meeting ends.
  */
 export function dueEvents(
   targets: AlarmTarget[],
@@ -147,6 +154,7 @@ export function dueEvents(
   fired: ReadonlySet<string>,
   now: number,
   snoozedUntil: Day['snoozedUntil'] = {},
+  inMeeting = false,
 ): { fire: AlarmEvent[]; crossed: string[]; snoozed: AlarmTarget[] } {
   const fire: AlarmEvent[] = [];
   const crossed: string[] = [];
@@ -185,9 +193,10 @@ export function dueEvents(
     }
 
     const pending = candidates.filter((c) => c.at <= now && !fired.has(c.key)).sort((a, b) => a.at - b.at);
-    if (pending.length === 0) continue;
-    for (const c of pending) crossed.push(c.key);
-    fire.push(pending[pending.length - 1]!);
+    const ring = inMeeting ? pending.filter((c) => c.kind === 'due' && MEETING_RINGS.includes(c.id)).at(-1) : pending.at(-1);
+    if (!ring) continue;
+    for (const c of pending) if (c.at <= ring.at) crossed.push(c.key);
+    fire.push(ring);
   }
 
   return { fire, crossed, snoozed };
