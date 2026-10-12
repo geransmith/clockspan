@@ -417,7 +417,7 @@ describe('suggestions', () => {
     return r;
   }
 
-  const suggested = (): AlertOptions | undefined => vi.mocked(alert).mock.calls.find(([o]) => o.action?.label === BREAK_SUGGESTION.start)?.[0];
+  const suggested = (): AlertOptions | undefined => vi.mocked(alert).mock.calls.find(([o]) => o.actions?.[0]?.label === BREAK_SUGGESTION.start)?.[0];
 
   it('offers a break a fifth as long as a session finished by hand, quietly, and starts it from the banner', async () => {
     const { result } = await finishByHand(20);
@@ -430,11 +430,11 @@ describe('suggestions', () => {
       sticky: true,
       sound: false,
       notifications: false,
-      action: { label: BREAK_SUGGESTION.start },
+      actions: [{ label: BREAK_SUGGESTION.start }],
     });
     // The card's Break button offers the same length.
     expect(result.current.next).toMatchObject({ minutes: 4, long: false });
-    act(() => suggested()!.action!.run());
+    act(() => suggested()!.actions![0]!.run());
     expect(unlockAudio).toHaveBeenCalled();
     await settle();
     expect(api.startBreak).toHaveBeenCalledWith(TODAY, 4 * 60);

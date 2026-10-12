@@ -446,11 +446,11 @@ describe('banners', () => {
       tone: 'danger',
       tag: 'alarm:clockOut',
       sticky: true,
-      action: { label: 'Overtime approved', run },
+      actions: [{ label: 'Overtime approved', run }],
       sound: false,
       notifications: false,
     });
-    alerts.getBanners()[0]!.action!.run();
+    alerts.getBanners()[0]!.actions![0]!.run();
     expect(run).toHaveBeenCalledOnce();
   });
 });

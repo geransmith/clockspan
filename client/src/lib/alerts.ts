@@ -21,8 +21,8 @@ export interface Banner {
   at: number;
   /** Groups banners so a newer one replaces an older one of the same tag. */
   tag: string;
-  /** One optional button, e.g. "Overtime approved" on the clock-out alarm. */
-  action?: BannerAction;
+  /** Its buttons in order, e.g. "Overtime Approved" and "Snooze 15 min" on the clock-out alarm; undefined for none. */
+  actions?: BannerAction[];
 }
 
 export interface BannerAction {

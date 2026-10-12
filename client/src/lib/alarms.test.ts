@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { HOUR_MS, MINUTE_MS } from '../../../shared/dates.js';
 import { makeBreak, makeDay, makeSession, punchesAt, T0, TEST_SETTINGS, TODAY } from '../test/fixtures';
-import { alarmTargets, describeEvent, dueEvents, eventKey, missedClockIn, type AlarmEvent, type AlarmTarget, type TargetDay } from './alarms';
+import {
+  alarmTargets,
+  describeEvent,
+  describeSnooze,
+  dueEvents,
+  eventKey,
+  missedClockIn,
+  SNOOZE_MINUTES,
+  type AlarmEvent,
+  type AlarmTarget,
+  type TargetDay,
+} from './alarms';
 import { formatTime } from './format';
 import { patchCard } from './layout';
 import { computeTimeclock } from './timeclock';
@@ -88,6 +99,108 @@ describe('dueEvents', () => {
       ['lunchBy', 'due'],
       ['secondMeal', 'lead'],
     ]);
+  });
+
+  describe('a snooze', () => {
+    // Pressed `SNOOZE_MINUTES` before it ends.
+    const snoozedAt = (press: number) => press + SNOOZE_MINUTES * MINUTE_MS;
+    const fires = (r: ReturnType<typeof dueEvents>) => r.fire.map((e) => [e.id, e.kind, e.minutes]);
+
+    it('quiets only its own alarm, firing and crossing nothing until its time, while another past due rings on', () => {
+      const both = [target(T, 'lunchBy'), target(T)];
+      const snooze = { lunchBy: snoozedAt(T + MINUTE_MS) };
+      const r = dueEvents(both, alarms(), new Set(), T + 5 * MINUTE_MS, snooze);
+      expect(fires(r)).toEqual([['clockOut', 'overdue', 5]]);
+      expect(r.crossed.every((k) => k.startsWith('clockOut:'))).toBe(true);
+      expect(r.snoozed).toEqual([target(T, 'lunchBy')]);
+      const fired = new Set(r.crossed);
+      const later = dueEvents(both, alarms(), fired, T + 10 * MINUTE_MS, snooze);
+      expect(fires(later)).toEqual([['clockOut', 'overdue', 10]]);
+      expect(later.snoozed).toEqual([target(T, 'lunchBy')]);
+    });
+
+    it.each([1, 5, 10, 60])('rings once at its time, then a full %i min repeat apart from it', (every) => {
+      const a = alarms({ overdueEveryMinutes: every });
+      // Pressed 6 s before the first repeat: 4:54 past the deadline for a 5 min repeat.
+      const press = T + every * MINUTE_MS - 6_000;
+      const fired = new Set(dueEvents([target(T)], a, new Set(), press).crossed);
+      const until = snoozedAt(press);
+      const snooze = { clockOut: until };
+      const before = dueEvents([target(T)], a, fired, until - 1, snooze);
+      expect([before.fire, before.crossed]).toEqual([[], []]);
+
+      const ring = dueEvents([target(T)], a, fired, until, snooze);
+      // Whole minutes past the deadline: 19 for the 5 min repeat, rung at 19:54.
+      const m = every + SNOOZE_MINUTES - 1;
+      expect(fires(ring)).toEqual([['clockOut', 'overdue', m]]);
+      expect(ring.snoozed).toEqual([]);
+      for (const k of ring.crossed) fired.add(k);
+      // Nothing on the deadline's own beat (20:00), nor before the next.
+      expect(dueEvents([target(T)], a, fired, T + (m + 1) * MINUTE_MS, snooze).fire).toEqual([]);
+      expect(dueEvents([target(T)], a, fired, until + every * MINUTE_MS - 1, snooze).fire).toEqual([]);
+      expect(fires(dueEvents([target(T)], a, fired, until + every * MINUTE_MS, snooze))).toEqual([['clockOut', 'overdue', m + every]]);
+    });
+
+    it('takes a second press after its ring and a repeat, ringing once at the new time with a key of its own', () => {
+      const fired = new Set(dueEvents([target(T)], alarms(), new Set(), T + 4 * MINUTE_MS + 54_000).crossed);
+      const first = { clockOut: snoozedAt(T + 4 * MINUTE_MS + 54_000) };
+      for (const now of [first.clockOut, first.clockOut + 5 * MINUTE_MS]) {
+        for (const k of dueEvents([target(T)], alarms(), fired, now, first).crossed) fired.add(k);
+      }
+      // The repeat at 24:54 was the last; pressed again at 26:00.
+      const second = { clockOut: snoozedAt(T + 26 * MINUTE_MS) };
+      const quiet = dueEvents([target(T)], alarms(), fired, second.clockOut - 1, second);
+      expect([quiet.fire, quiet.crossed, quiet.snoozed]).toEqual([[], [], [target(T)]]);
+      const ring = dueEvents([target(T)], alarms(), fired, second.clockOut, second);
+      expect(fires(ring)).toEqual([['clockOut', 'overdue', 41]]);
+      expect(fired.has(ring.fire[0]!.key)).toBe(false);
+    });
+
+    it('lets a deadline moved past the press ring on its new schedule', () => {
+      const press = T + 3 * MINUTE_MS;
+      const fired = new Set(dueEvents([target(T)], alarms(), new Set(), press).crossed);
+      const snooze = { clockOut: snoozedAt(press) };
+      // An Out / In pushed the end to 9 min past the old one, after the press.
+      const moved = T + 9 * MINUTE_MS;
+      const r = dueEvents([target(moved)], alarms(), fired, moved, snooze);
+      expect(fires(r)).toEqual([['clockOut', 'due', 0]]);
+      expect(r.snoozed).toEqual([]);
+    });
+
+    it('never covers the retrospective or an alarm whose Repeat is off', () => {
+      const retro = { ...alarms(), retro: { ...TEST_SETTINGS.alarms.retro, overdueEveryMinutes: 5 } };
+      const r = dueEvents([target(T, 'retro')], retro, new Set(), T + 5 * MINUTE_MS, { retro: snoozedAt(T) });
+      expect([fires(r), r.snoozed]).toEqual([[['retro', 'overdue', 5]], []]);
+      const once = dueEvents([target(T)], alarms({ overdueEveryMinutes: 0 }), new Set(), T, { clockOut: snoozedAt(T) });
+      expect([fires(once), once.snoozed]).toEqual([[['clockOut', 'due', 0]], []]);
+    });
+  });
+});
+
+describe('describeSnooze', () => {
+  const until = T + 15 * MINUTE_MS;
+  // A deadline 1h 20m and 30 s past, or 30 s past.
+  const late = { now: T + 80.5 * MINUTE_MS };
+  const justNow = { now: T + 30_000 };
+  const lines: [AlarmId, string, string, string][] = [
+    ['lunchBy', 'Lunch alarm', 'Lunch is 1h 20m overdue.', 'Take lunch now.'],
+    ['secondMeal', 'Second meal alarm', 'Second meal period is 1h 20m overdue.', 'Take your second meal period.'],
+    ['clockOut', 'Clock-out alarm', 'Clock-out is 1h 20m overdue.', 'Time to clock out.'],
+    ['lunchEnd', 'Lunch end alarm', 'Lunch ended 1h 20m ago.', 'Lunch is over.'],
+    // Counted from the last rest, 90 min before its deadline.
+    ['noBreak', 'Break alarm', '2h 50m without a break.', '1h 30m without a break.'],
+  ];
+
+  it.each(lines)('words %s in 12-hour and 24-hour time, flooring the minutes', (id, kicker, overdue, due) => {
+    for (const hour12 of [true, false]) {
+      const time = formatTime(until, hour12);
+      expect(describeSnooze(target(T, id), until, { ...late, hour12 })).toEqual({
+        kicker,
+        title: `Snoozed Until ${time}`,
+        body: `${overdue} It rings again at ${time}.`,
+      });
+      expect(describeSnooze(target(T, id), until, { ...justNow, hour12 }).body).toBe(`${due} It rings again at ${time}.`);
+    }
   });
 });
 

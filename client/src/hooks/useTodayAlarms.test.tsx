@@ -118,17 +118,29 @@ describe('useTodayAlarms', () => {
     await judged();
     const clockOut = alerted().find((a) => a.tag === 'alarm:clockOut');
     expect(clockOut).toBeDefined();
-    expect(clockOut!.action).toBeUndefined();
+    expect(clockOut!.actions!.map((a) => a.label)).toEqual(['Snooze 15 min']);
 
     freshDevice();
     render(makeSettings(), overDay());
     await judged();
-    const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.action!;
+    const action = alerted().find((a) => a.tag === 'alarm:clockOut')!.actions![0]!;
     expect(action.label).toBe('Overtime Approved');
     // The button approves today, where the switch on the card would.
     vi.mocked(api.putOvertime).mockResolvedValue(answered({ overtimeApproved: true }));
     await act(async () => action.run());
     expect(api.putOvertime).toHaveBeenCalledWith(TODAY, true);
+  });
+
+  it("snoozes the clock-out alarm on today's day from its banner, for 15 min from the press", async () => {
+    render(makeSettings(), overDay());
+    await judged();
+    const snooze = alerted().find((a) => a.tag === 'alarm:clockOut')!.actions![1]!;
+    expect(snooze.label).toBe('Snooze 15 min');
+    const until = Date.now() + 15 * MINUTE_MS;
+    vi.mocked(api.putSnooze).mockResolvedValue(answered({ snoozedUntil: { clockOut: until } }));
+    await act(async () => snooze.run());
+    expect(api.putSnooze).toHaveBeenCalledWith(TODAY, 'clockOut', until);
+    expect(api.putOvertime).not.toHaveBeenCalled();
   });
 
   it("waits for a come-back's refresh rather than ring on a copy from before the tab was hidden", async () => {
@@ -229,7 +241,7 @@ describe('useTodayAlarms', () => {
       render(makeSettings(), loggedDay());
       await judged();
       expect(banner()?.title).toBe('Not Clocked In');
-      act(() => banner()!.action!.run());
+      act(() => banner()!.actions![0]!.run());
       expect(unlockAudio).toHaveBeenCalledOnce();
       expect(offerNotifications).toHaveBeenCalledExactlyOnceWith(true);
       await settle();
@@ -245,7 +257,7 @@ describe('useTodayAlarms', () => {
       // The phone clocked in meanwhile, and a refresh brought it before the press.
       vi.mocked(api.getDay).mockResolvedValue(answered({ ...loggedDay(), punches: punchesAt(T0 - 20 * MINUTE_MS) }));
       await act(() => result.current.store.refresh(TODAY));
-      act(() => banner()!.action!.run());
+      act(() => banner()!.actions![0]!.run());
       await settle();
       expect(api.putPunches).not.toHaveBeenCalled();
     });
@@ -260,7 +272,7 @@ describe('useTodayAlarms', () => {
       vi.mocked(api.putPunches).mockImplementation(echoPunches);
       render(makeSettings(), atLunch());
       await judged();
-      const action = banner()!.action!;
+      const action = banner()!.actions![0]!;
       expect(action.label).toBe('Lunch In Now');
       // Pressed 7 min after the banner went up, short of the first repeat.
       vi.setSystemTime(T0 + 7 * MINUTE_MS);
@@ -275,7 +287,7 @@ describe('useTodayAlarms', () => {
     it("takes the banner down and sends nothing when another device's Lunch in reached the page first", async () => {
       render(makeSettings(), atLunch());
       await judged();
-      const action = banner()!.action!;
+      const action = banner()!.actions![0]!;
       vi.mocked(dismissByTag).mockClear();
       setVisibility('hidden');
       vi.setSystemTime(T0 + MINUTE_MS);

@@ -38,7 +38,7 @@ describe("time's up", () => {
 
     // The button: five more minutes from now.
     vi.mocked(api.patchSession).mockImplementation(async (_id, patch) => answered({ session: makeSession({ ...patch, startedAt: T0 - 24.9 * MINUTE_MS }) }));
-    const action = vi.mocked(alert).mock.calls[0]![0].action!;
+    const action = vi.mocked(alert).mock.calls[0]![0].actions![0]!;
     expect(action.label).toBe(TIMER_DUE.more(makeSettings().adjustStepMinutes));
     vi.mocked(dismissByTag).mockClear();
     act(() => action.run());
@@ -51,12 +51,12 @@ describe("time's up", () => {
   it('takes the button off, quietly, once the time worked reaches the longest plan', async () => {
     // A minute past a 7 h 55 min plan: five more minutes are still there to add.
     await renderRunning(startedAgo(8 * 60 - 4, { plannedSeconds: 8 * 3600 - 5 * 60 }));
-    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: true, action: { label: TIMER_DUE.more(5) } });
+    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: true, actions: [{ label: TIMER_DUE.more(5) }] });
     await settle(3 * MINUTE_MS);
     expect(alert).toHaveBeenCalledTimes(1);
     await settle(2 * MINUTE_MS);
     expect(alert).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: false, notifications: false, action: undefined });
+    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', sound: false, notifications: false, actions: undefined });
   });
 
   it('shows the banner again after a reload without a second chime', async () => {
@@ -71,7 +71,7 @@ describe("time's up", () => {
     expect(alert).toHaveBeenCalledTimes(1);
     vi.mocked(api.patchSession).mockRejectedValue(new Error('offline'));
     vi.mocked(dismissByTag).mockClear();
-    act(() => vi.mocked(alert).mock.calls[0]![0].action!.run());
+    act(() => vi.mocked(alert).mock.calls[0]![0].actions![0]!.run());
     // Given time at once, so the banner goes while the + is on its way.
     expect(result.current.timer.due).toBe(false);
     expect(dismissByTag).toHaveBeenCalledWith('timer-due');
@@ -84,7 +84,7 @@ describe("time's up", () => {
       sticky: true,
       sound: false,
       notifications: false,
-      action: { label: TIMER_DUE.more(makeSettings().adjustStepMinutes) },
+      actions: [{ label: TIMER_DUE.more(makeSettings().adjustStepMinutes) }],
     });
   });
 

@@ -3,7 +3,7 @@ import * as api from '../api';
 import { emptyDay } from '../../../shared/api.js';
 import { mergePriorities } from '../../../shared/priorities.js';
 import { mergePunches } from '../../../shared/punches.js';
-import type { Day, Priority, PruneResult, Punch, Session } from '../types';
+import type { AlarmId, Day, Priority, PruneResult, Punch, Session } from '../types';
 import { warnSaveFailed } from '../lib/alerts';
 import { ApiError, goneAt } from '../lib/apiError';
 import { ADD_PRIORITY_FAILED, SAVE_FAILED } from '../lib/copy';
@@ -119,6 +119,8 @@ interface DayStore {
    */
   prioritiesSaved: (date: string) => Promise<void>;
   setOvertimeApproved: (date: string, approved: boolean) => Promise<boolean>;
+  /** One alarm's snooze, the epoch ms it rings again; the other alarms' already shown, maybe another device's, stay. */
+  setSnoozedUntil: (date: string, alarm: AlarmId, until: number) => Promise<boolean>;
   /** The day's own work-day length in minutes; null goes back to the usual one. */
   setWorkMinutes: (date: string, minutes: number | null) => Promise<boolean>;
   setRetro: (date: string, patch: api.RetroPatch) => Promise<boolean>;
@@ -549,6 +551,16 @@ export function DayProvider({ children }: { children: ReactNode }) {
     [putDayFields],
   );
 
+  const setSnoozedUntil = useCallback(
+    (date: string, alarm: AlarmId, until: number) =>
+      putDayFields(
+        date,
+        (d) => ({ ...d, snoozedUntil: { ...d.snoozedUntil, [alarm]: until } }),
+        () => api.putSnooze(date, alarm, until),
+      ),
+    [putDayFields],
+  );
+
   const setWorkMinutes = useCallback(
     (date: string, minutes: number | null) =>
       putDayFields(
@@ -712,6 +724,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       addPriority,
       prioritiesSaved,
       setOvertimeApproved,
+      setSnoozedUntil,
       setWorkMinutes,
       setRetro,
       applySession,
@@ -734,6 +747,7 @@ export function DayProvider({ children }: { children: ReactNode }) {
       addPriority,
       prioritiesSaved,
       setOvertimeApproved,
+      setSnoozedUntil,
       setWorkMinutes,
       setRetro,
       applySession,

@@ -6,7 +6,7 @@ import { currentUser } from '../auth/middleware.js';
 import { refuse, STALE_CLIENT } from '../refuse.js';
 import { countDays, pruneDays, reclaimSpace } from '../retention.js';
 import { collectItems, inList, itemCounts, nextFromLater, type ItemCounts } from '../board.js';
-import { isWholeNumber } from '../validate.js';
+import { isOneOf, isWholeNumber } from '../validate.js';
 import { cutoffKey, DAY_MS, daysBetween, isValidDateKey, punchWindow } from '../../shared/dates.js';
 import {
   breakRowToJson,
@@ -29,7 +29,7 @@ import { startSession } from './sessions.js';
 import { FREE_ROW, mergePriorities } from '../../shared/priorities.js';
 import { cutText, taskNote, taskTitle } from '../../shared/text.js';
 import { kindForPosition, MAX_PUNCHES, mergePunches } from '../../shared/punches.js';
-import { MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
+import { ALARM_IDS, MAX_PRIORITIES, SETTING_LIMITS } from '../../shared/settings.js';
 import {
   emptyDay,
   LIMITS,
@@ -43,6 +43,7 @@ import {
   type PunchesResponse,
   type RangeResponse,
   type RetroResponse,
+  type SnoozeResponse,
   type TargetResponse,
 } from '../../shared/api.js';
 
@@ -264,6 +265,9 @@ function rangeRows(db: DB, userId: number, from: string, to: string) {
 }
 type ChildRows = ReturnType<typeof rangeRows>;
 
+/** A day's snoozes as stored: JSON of alarm id to epoch ms, written only by `PUT /:date/snooze`. */
+const snoozes = (day: DayRow): Day['snoozedUntil'] => JSON.parse(day.snoozed_until) as Day['snoozedUntil'];
+
 /** The full JSON for one existing day, its child rows taken from its range's. */
 function dayJson(day: DayRow, rows: ChildRows): Day {
   const of = <T>(byDayId: Map<number, T[]>): T[] => byDayId.get(day.id) ?? [];
@@ -276,6 +280,7 @@ function dayJson(day: DayRow, rows: ChildRows): Day {
     retroNote: day.retro_note,
     retroAt: day.retro_at,
     workMinutes: day.work_minutes,
+    snoozedUntil: snoozes(day),
     sessions: of(rows.sessions).map(sessionRowToJson),
     breaks: of(rows.breaks).map(breakRowToJson),
   };
@@ -452,6 +457,22 @@ export function daysRouter(db: DB, config: Config): Router {
     const dayId = ensureDay(db, user.id, date);
     db.prepare(`UPDATE days SET overtime_approved = ? WHERE id = ?`).run(approved ? 1 : 0, dayId);
     res.json({ overtimeApproved: approved } satisfies OvertimeResponse);
+  });
+
+  // One alarm's snooze: when it rings again, a time the client gives. The other alarms' stay, as a
+  // task's PATCH sets one weekday, so two devices snoozing different alarms both land.
+  r.put('/:date/snooze', (req, res) => {
+    const user = currentUser(req);
+    const { date } = req.params;
+    const { alarm, until: raw } = req.body as { alarm?: unknown; until?: unknown };
+    if (!isOneOf(ALARM_IDS, alarm)) return refuse(res, 400, `alarm must be one of ${ALARM_IDS.join(', ')}.`);
+    const window = punchWindow(date);
+    const until = parseInstant(raw, window.from, window.to);
+    if (until == null) return refuse(res, 400, 'until must be a time on that day.');
+    const dayId = ensureDay(db, user.id, date);
+    const snoozedUntil = { ...snoozes(findDay(db, user.id, date)!), [alarm]: until };
+    db.prepare(`UPDATE days SET snoozed_until = ? WHERE id = ?`).run(JSON.stringify(snoozedUntil), dayId);
+    res.json({ snoozedUntil } satisfies SnoozeResponse);
   });
 
   // This day's own work-day length (a half day, a long one); null goes back to the setting.

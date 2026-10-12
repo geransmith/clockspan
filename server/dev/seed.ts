@@ -279,8 +279,10 @@ type DayDraft = Omit<SeededDay, 'sessions' | 'breaks'> & { sessions: Omit<Seeded
 /** Writes a day, its entries naming the tasks in `items` (uid to id) and its sessions on them. */
 function insertDay(db: DB, userId: number, day: DayDraft, items: ReadonlyMap<string, number>): SeededDay {
   const info = db
-    .prepare(`INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(userId, day.date, day.createdAt, day.overtimeApproved ? 1 : 0, day.retroNote, day.retroAt, day.workMinutes);
+    .prepare(
+      `INSERT INTO days (user_id, date, created_at, overtime_approved, retro_note, retro_at, work_minutes, snoozed_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(userId, day.date, day.createdAt, day.overtimeApproved ? 1 : 0, day.retroNote, day.retroAt, day.workMinutes, JSON.stringify(day.snoozedUntil));
   const dayId = Number(info.lastInsertRowid);
   const punch = db.prepare(`INSERT INTO punches (day_id, position, kind, at) VALUES (?, ?, ?, ?)`);
   for (const p of day.punches) punch.run(dayId, p.position, p.kind, p.at);
@@ -384,7 +386,7 @@ function buildPastDay(date: string, kind: Exclude<DayKind, 'today'>, rand: () =>
     return row ? [ranOver(completed(row, startedAt, 25), 9)] : [];
   };
 
-  const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null };
+  const base = { date, kind, createdAt, overtimeApproved: false, workMinutes: null, snoozedUntil: {} };
 
   if (kind === 'extraPair') {
     // An extra out/in pair in the afternoon (positions 3-4) pushes the clock out to position 5.
@@ -555,6 +557,7 @@ function buildToday(today: string, now: number, running: boolean, last: Pick<Day
     createdAt: plannedAt,
     overtimeApproved: false,
     workMinutes: null,
+    snoozedUntil: {},
     punches: punchRows([clockIn, null, null, null]),
     priorities,
     sessions,

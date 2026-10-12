@@ -95,6 +95,7 @@ const ROUTES: [string, () => Promise<unknown>, string, string, unknown][] = [
   // With the list it was built on, so the server can keep another device's changes.
   ['putPriorities', () => api.putPriorities(TODAY, [REPORT], [FREE]), 'PUT', `/api/days/${TODAY}/priorities`, { priorities: [REPORT], base: [FREE] }],
   ['putOvertime', () => api.putOvertime(TODAY, true), 'PUT', `/api/days/${TODAY}/overtime`, { approved: true }],
+  ['putSnooze', () => api.putSnooze(TODAY, 'lunchBy', 5), 'PUT', `/api/days/${TODAY}/snooze`, { alarm: 'lunchBy', until: 5 }],
   ['putTarget', () => api.putTarget(TODAY, null), 'PUT', `/api/days/${TODAY}/target`, { workMinutes: null }],
   ['putRetro', () => api.putRetro(TODAY, { note: 'why', done: true }), 'PUT', `/api/days/${TODAY}/retro`, { note: 'why', done: true }],
   ['getRange', () => api.getRange('2026-09-01', TODAY), 'GET', `/api/days/range?from=2026-09-01&to=${TODAY}`, undefined],
@@ -307,7 +308,7 @@ describe('an update while the page is open', () => {
       await api.getDay(TODAY);
       expect(raised).toHaveBeenCalledTimes(1);
       expect(updated()).toEqual([
-        expect.objectContaining({ title: UPDATED.title, body: UPDATED.body, tone: 'info', action: { label: UPDATED.reload, run: expect.any(Function) } }),
+        expect.objectContaining({ title: UPDATED.title, body: UPDATED.body, tone: 'info', actions: [{ label: UPDATED.reload, run: expect.any(Function) }] }),
       ]);
       // Quiet: no chime, no notification, and kept until closed.
       expect(alert).toHaveBeenCalledTimes(1);
@@ -341,7 +342,7 @@ describe('an update while the page is open', () => {
     const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
     answerFrom('9.2.0');
     await api.getRunning();
-    updated()[0]!.action!.run();
+    updated()[0]!.actions![0]!.run();
     expect(reload).toHaveBeenCalledTimes(1);
   });
 });
@@ -371,7 +372,7 @@ describe('a restored backup', () => {
     answerAt(40);
     await api.getDay(TODAY);
     expect(restored()).toEqual([
-      expect.objectContaining({ title: RESTORED.title, body: RESTORED.body, tone: 'info', action: { label: RESTORED.reload, run: expect.any(Function) } }),
+      expect.objectContaining({ title: RESTORED.title, body: RESTORED.body, tone: 'info', actions: [{ label: RESTORED.reload, run: expect.any(Function) }] }),
     ]);
     expect(alert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ tag: 'restored', sticky: true, sound: false, notifications: false }));
     dismissByTag('restored');

@@ -339,7 +339,7 @@ describe('adjust', () => {
     cleanup();
     const due = await renderRunning(startedAgo(8 * 60 + 2, { plannedSeconds: 8 * 3600 }));
     expect(due.result.current.timer).toMatchObject({ due: true, canAdd: false });
-    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', action: undefined });
+    expect(vi.mocked(alert).mock.lastCall![0]).toMatchObject({ tag: 'timer-due', actions: undefined });
     await act(() => due.result.current.timer.adjust(5 * 60));
     expect(api.patchSession).toHaveBeenCalledTimes(1);
     expect(api.finishSession).not.toHaveBeenCalled();

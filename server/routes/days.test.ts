@@ -31,6 +31,7 @@ describe('GET /api/days/:date', () => {
       retroNote: '',
       retroAt: null,
       workMinutes: null,
+      snoozedUntil: {},
       sessions: [],
       breaks: [],
     });
@@ -160,6 +161,36 @@ describe('PUT /api/days/:date/overtime', () => {
     expect((await app.api.get('/api/days/2026-09-01')).body.overtimeApproved).toBe(true);
     expect((await app.api.put('/api/days/2026-09-01/overtime', { approved: false })).body).toEqual({ overtimeApproved: false });
     expect((await app.api.put('/api/days/2026-09-01/overtime', { approved: 'yes' })).status).toBe(400);
+  });
+});
+
+describe('PUT /api/days/:date/snooze', () => {
+  const snooze = (body?: unknown) => app.api.put('/api/days/2026-09-01/snooze', body);
+
+  it("stores one alarm's time, keeps another alarm's, and replaces its own on a second press", async () => {
+    expect((await snooze({ alarm: 'lunchBy', until: T0 + 12 * HOUR_MS })).body).toEqual({ snoozedUntil: { lunchBy: T0 + 12 * HOUR_MS } });
+    expect((await snooze({ alarm: 'clockOut', until: T0 + 17 * HOUR_MS })).body).toEqual({
+      snoozedUntil: { lunchBy: T0 + 12 * HOUR_MS, clockOut: T0 + 17 * HOUR_MS },
+    });
+    const both = { lunchBy: T0 + 13 * HOUR_MS, clockOut: T0 + 17 * HOUR_MS };
+    expect((await snooze({ alarm: 'lunchBy', until: T0 + 13 * HOUR_MS })).body).toEqual({ snoozedUntil: both });
+    expect((await app.api.get('/api/days/2026-09-01')).body.snoozedUntil).toEqual(both);
+    expect((await app.api.get('/api/days/range?from=2026-09-01&to=2026-09-01')).body.days[0].snoozedUntil).toEqual(both);
+  });
+
+  it('refuses an alarm it has no id for, and a time that is missing, not a number, or off the day', async () => {
+    const until = T0 + 12 * HOUR_MS;
+    const ids = 'lunchBy, lunchEnd, clockOut, secondMeal, retro, noBreak';
+    for (const body of [{ alarm: 'nap', until }, { until }]) {
+      const r = await snooze(body);
+      expect([r.status, r.body]).toEqual([400, { error: `alarm must be one of ${ids}.` }]);
+    }
+    const { to } = punchWindow('2026-09-01');
+    for (const body of [{ alarm: 'lunchBy', until: 'soon' }, { alarm: 'lunchBy' }, { alarm: 'lunchBy', until: to + 1 }]) {
+      const r = await snooze(body);
+      expect([r.status, r.body]).toEqual([400, { error: 'until must be a time on that day.' }]);
+    }
+    expect(app.count('days', 'date = ?', '2026-09-01')).toBe(0);
   });
 });
 
@@ -319,12 +350,15 @@ describe('days are scoped to the signed-in user', () => {
     expect((await b.put(`/api/days/${date}/overtime`, { approved: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/retro`, { note: 'b', done: true })).status).toBe(200);
     expect((await b.put(`/api/days/${date}/target`, { workMinutes: 240 })).status).toBe(200);
+    const until = Date.parse(date) + 12 * HOUR_MS;
+    expect((await b.put(`/api/days/${date}/snooze`, { alarm: 'lunchBy', until })).status).toBe(200);
     expect((await a.get(`/api/days/${date}`)).body).toEqual(before);
     const bDay = (await b.get(`/api/days/${date}`)).body;
     expect(bDay.priorities.map((p: { text: string }) => p.text)).toEqual(['Mine']);
     expect(bDay.overtimeApproved).toBe(true);
     expect(bDay.retroNote).toBe('b');
     expect(bDay.workMinutes).toBe(240);
+    expect(bDay.snoozedUntil).toEqual({ lunchBy: until });
     expect(app.db.prepare(`SELECT user_id FROM days WHERE date = ? ORDER BY user_id`).all(date)).toEqual([{ user_id: admin.id }, { user_id: member.id }]);
     // B naming the uid of a task of A's renames, ticks and removes B's own task of that uid,
     // whose sessions are B's: A's task, its rows and its time are as they were.
@@ -360,6 +394,8 @@ const writes = (day: string): [method: 'put' | 'post', path: string, body: unkno
   ['put', `${day}/punches`, { punches: [] }],
   ['put', `${day}/priorities`, { priorities: [{ text: 'x' }] }],
   ['put', `${day}/overtime`, { approved: true }],
+  // Noon UTC on the day itself: a constant would fall outside the far date's window, and a 400 from the body would prove nothing.
+  ['put', `${day}/snooze`, { alarm: 'lunchBy', until: Date.parse(day.slice(-10)) + 12 * HOUR_MS }],
   ['put', `${day}/target`, { workMinutes: 240 }],
   ['put', `${day}/retro`, { note: 'x' }],
   ['post', `${day}/sessions`, { plannedSeconds: 1500 }],
