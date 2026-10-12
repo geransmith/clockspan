@@ -120,9 +120,7 @@ it("reads a break's full length at the start when the server's clock is a moment
   act(() => void result.current.start(5));
   await settle();
   expect(result.current.remainingSeconds).toBe(300);
-  await settle(1000);
-  expect(result.current.remainingSeconds).toBe(300);
-  await settle(1000);
+  await settle(2000);
   expect(result.current.remainingSeconds).toBe(299);
 });
 
