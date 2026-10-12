@@ -13,6 +13,7 @@ import { useClock } from './hooks/useClock';
 import { useLiveChanges } from './hooks/useLiveChanges';
 import { useRoute } from './hooks/useRoute';
 import { useSettings } from './hooks/useSettings';
+import { useTabTitle } from './hooks/useTabTitle';
 import { useTimer } from './hooks/useTimer';
 import { useTodayAlarms } from './hooks/useTodayAlarms';
 import { todayKey } from '../../shared/dates.js';
@@ -73,6 +74,7 @@ function Shell() {
   // The sheet on today and the board (once it is past the settings' wait) show today's failed load
   // in place; elsewhere a banner says it.
   const { setEditingPunches } = useTodayAlarms(today, now, openRetro, (route.view === 'board' && loaded) || (route.view === 'sheet' && date === today));
+  useTabTitle(today, now);
   const loading = <div className="loading" aria-busy="true" />;
 
   const page = () => {
