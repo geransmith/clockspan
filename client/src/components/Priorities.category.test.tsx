@@ -179,6 +179,11 @@ describe('Priorities: the time logged on a row', () => {
     expect(screen.getByRole('img', { name: '1 hour 40 minutes logged on this day' }).textContent).toBe('1h 40m');
   });
 
+  it('shows a minute exactly', async () => {
+    await renderCard([REPORT], [completedSession(1, T0, 60, { priorityUid: REPORT.uid })], makePick());
+    expect(screen.getByRole('img', { name: '1 minute logged today' }).textContent).toBe('1m');
+  });
+
   it('shows nothing for a running timer, under a minute, or for time on other days', async () => {
     const { unmount } = await renderCard([REPORT], [makeSession({ startedAt: T0 - 30 * MINUTE_MS, priorityUid: REPORT.uid })], makePick());
     expect(logged()).toBeNull();
