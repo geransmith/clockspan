@@ -5,7 +5,7 @@
 # On the builder's own platform whatever the target: what comes out (the bundle, dist/server,
 # and node_modules, where better-sqlite3 carries a prebuild for every platform and picks one at
 # run time) is the same for amd64 and arm64, so an arm64 image emulates only the stage below.
-FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts (the image doesn't copy .npmrc): no dependency's install script runs.
@@ -20,7 +20,7 @@ COPY shared ./shared
 RUN npm run build && npm prune --omit=dev
 
 # ---- runtime ----
-FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 WORKDIR /app
 # su-exec drops root in the entrypoint. The HEALTHCHECK's wget is busybox's, already in the
 # base image; CI's image-smoke job runs that exact command inside the container. The app runs
